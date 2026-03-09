@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Tavariş Ottoman-Inspired Palette */
+  --color-primary: #1a4480;
+  /* Deep Navy Blue */
+  --color-accent: #c41e3a;
+  /* Burgundy Red */
+  --color-accent-gold: #d4a853;
+  /* Gold Highlights */
+  --color-bg-primary: #faf8f0;
+  /* Warm Cream */
+  --color-bg-card: #ffffff;
+
+  --color-success: #2e7d32;
+  --color-warning: #f57c00;
+  --color-error: #c41e3a;
+
+  --color-text-primary: #1a4480;
+  --color-text-secondary: #4a5568;
+  --color-text-muted: #718096;
+
+  --color-border-light: rgba(26, 68, 128, 0.08);
+  --color-border-elegant: rgba(212, 168, 83, 0.2);
+
+  --font-inter: "Inter", sans-serif;
+  --font-playfair: "Playfair Display", serif;
+
+  --radius-elegant: 1.25rem;
+  --radius-soft: 0.75rem;
+
+  --shadow-elegant: 0 10px 30px -10px rgba(26, 68, 128, 0.12);
+  --shadow-gold: 0 10px 20px -5px rgba(212, 168, 83, 0.15);
+}
+
+@layer base {
+  * {
+    @apply border-border-light;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-secondary font-inter antialiased;
+    background-image: radial-gradient(circle at 50% 50%, rgba(212, 168, 83, 0.03) 0%, transparent 100%);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-playfair text-primary font-semibold;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-card border border-border-light rounded-elegant shadow-elegant overflow-hidden transition-all duration-300;
+  }
+
+  .card-hover {
+    @apply hover:-translate-y-1 hover:shadow-2xl hover:border-accent-gold/30;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white font-semibold py-3 px-6 rounded-soft hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] transition-all;
+  }
+
+  .btn-accent {
+    @apply bg-accent text-white font-semibold py-3 px-6 rounded-soft hover:bg-accent/90 transition-all;
+  }
+
+  .input-elegant {
+    @apply w-full bg-white border border-border-light rounded-soft p-4 focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all;
+  }
+}
+
+/* Animations */
+@keyframes shine {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shine {
+  animation: shine 3s infinite linear;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}

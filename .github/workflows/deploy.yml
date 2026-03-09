@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ['main']
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -15,23 +15,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
+          cache-dependency-path: tavaris-scanner/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
+        working-directory: tavaris-scanner
 
       - name: Build
         run: npm run build
+        working-directory: tavaris-scanner
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -39,15 +42,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './dist'
+          path: './tavaris-scanner/dist'
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
