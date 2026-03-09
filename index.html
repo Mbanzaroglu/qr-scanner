@@ -1504,53 +1504,64 @@
     }
 
     // ============ CAMERA ============
-    async function startCamera() {
-      video = $('video');
-      canvas = $('canvas');
-      ctx = canvas.getContext('2d', { willReadFrequently: true });
-      
-      $('cameraStatus').innerHTML = '<span>⏳</span><span>Kamera başlatılıyor...</span>';
-      $('cameraStatus').className = 'camera-status';
-      $('startCamBtn').disabled = true;
-      $('startCamBtn').innerHTML = '<span>⏳</span><span>Başlatılıyor...</span>';
+    // Kamera başlat
+async function startCamera() {
+  video = $('video');
+  canvas = $('canvas');
+  ctx = canvas.getContext('2d', { willReadFrequently: true });
+  
+  $('cameraStatus').innerHTML = '<span>⏳</span><span>Kamera başlatılıyor...</span>';
+  $('cameraStatus').className = 'camera-status';
+  $('startCamBtn').disabled = true;
+  $('startCamBtn').innerHTML = '<span>⏳</span><span>Başlatılıyor...</span>';
 
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            facingMode: 'environment', 
-            width: { ideal: 1280 }, 
-            height: { ideal: 720 } 
-          }
-        });
-        
-        video.srcObject = stream;
-        await video.play();
-        
-        video.onloadedmetadata = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          state.scanning = true;
-          state.cameraActive = true;
-          
-          $('cameraPlaceholder').style.display = 'none';
-          $('cameraOverlay').style.display = 'flex';
-          $('scanLine').style.display = 'block';
-          $('cameraStatus').innerHTML = '<span>✓</span><span>Kamera aktif - QR kodu gösterin</span>';
-          $('cameraStatus').className = 'camera-status success';
-          $('startCamBtn').style.display = 'none';
-          
-          showToast('Kamera başlatıldı', 'success');
-          requestAnimationFrame(scanFrame);
-        };
-      } catch (err) {
-        $('cameraStatus').innerHTML = `<span>⚠️</span><span>Kamera hatası: ${err.message}</span>`;
-        $('cameraStatus').className = 'camera-status error';
-        $('startCamBtn').disabled = false;
-        $('startCamBtn').innerHTML = '<span>🔄</span><span>TEKRAR DENE</span>';
-        
-        showToast('Kamera başlatılamadı. Manuel girişi deneyin.', 'error');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { 
+        facingMode: 'environment', 
+        width: { ideal: 1280 }, 
+        height: { ideal: 720 } 
       }
-    }
+    });
+    
+    video.srcObject = stream;
+    
+    // iOS için önemli: önce event listener, sonra play
+    video.onloadedmetadata = function() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      state.scanning = true;
+      state.cameraActive = true;
+      
+      $('cameraPlaceholder').style.display = 'none';
+      $('cameraOverlay').style.display = 'flex';
+      $('scanLine').style.display = 'block';
+      $('cameraStatus').innerHTML = '<span>✓</span><span>Kamera aktif - QR kodu gösterin</span>';
+      $('cameraStatus').className = 'camera-status success';
+      $('startCamBtn').style.display = 'none';
+      
+      showToast('Kamera başlatıldı', 'success');
+      requestAnimationFrame(scanFrame);
+    };
+    
+    // iOS Safari için: play() promise olarak handle et
+    video.play().then(function() {
+      console.log('Video playing');
+    }).catch(function(err) {
+      console.log('Play error:', err);
+    });
+    
+  } catch (err) {
+    $('cameraPlaceholder').innerHTML = '<div class="camera-placeholder-icon">⚠️</div><div class="camera-placeholder-text">Kamera başlatılamadı<br><small>' + err.message + '</small></div>';
+    $('cameraStatus').innerHTML = '<span>⚠️</span><span>' + err.message + '</span>';
+    $('cameraStatus').className = 'camera-status error';
+    $('startCamBtn').disabled = false;
+    $('startCamBtn').innerHTML = '<span>🔄</span><span>TEKRAR DENE</span>';
+    $('startCamBtn').style.display = 'flex';
+    
+    showToast('Kamera başlatılamadı', 'error');
+  }
+}
 
     function stopCamera() {
       state.scanning = false;
