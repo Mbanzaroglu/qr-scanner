@@ -52,7 +52,7 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="space-y-6 flex flex-col h-full"
+            className="space-y-6 flex flex-col min-h-full pb-10"
         >
             <div className="flex flex-col items-center gap-6">
                 <h1 className="text-3xl md:text-4xl text-primary text-center">Bilet Listesi</h1>
@@ -89,51 +89,51 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
                 />
             </div>
 
-            {/* Table Container */}
-            <div className="bg-white border border-border-light rounded-elegant shadow-elegant flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div className="overflow-x-auto min-h-0">
-                    <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-bg-primary/95 backdrop-blur-md z-10 border-b border-border-light">
+            {/* Table Container - Fixed header alignment and corner gaps */}
+            <div className="bg-white border border-border-light rounded-elegant shadow-elegant overflow-hidden mx-1 md:mx-4">
+                <table className="w-full text-left border-spacing-0 table-fixed">
+                    <thead className="bg-[#faf8f0] border-b border-border-light">
+                        <tr>
+                            <th className="px-6 md:px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-text-muted w-2/3 first:rounded-tl-elegant">Ad Soyad / İletİŞİm</th>
+                            <th className="px-6 md:px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-text-muted text-right last:rounded-tr-elegant">Tarİh</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-light/50">
+                        {loading && tickets.length === 0 ? (
                             <tr>
-                                <th className="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-text-muted">Ad Soyad / İletişim</th>
-                                <th className="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-text-muted text-right">Tarih</th>
+                                <td colSpan={2} className="p-20 text-center">
+                                    <div className="w-8 h-8 border-3 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border-light/50">
-                            {loading && tickets.length === 0 ? (
-                                <tr>
-                                    <td colSpan={2} className="p-20 text-center">
-                                        <div className="w-8 h-8 border-3 border-primary/20 border-t-primary rounded-full animate-spin mx-auto" />
+                        ) : filteredTickets.length === 0 ? (
+                            <tr>
+                                <td colSpan={2} className="p-20 text-center text-text-muted italic text-sm">Kayıt bulunamadı.</td>
+                            </tr>
+                        ) : (
+                            filteredTickets.map((t: Ticket) => (
+                                <tr
+                                    key={t.row}
+                                    onClick={() => onViewDetail(t)}
+                                    className="group hover:bg-primary/[0.04] active:bg-primary/[0.08] cursor-pointer transition-all border-l-4 border-l-transparent hover:border-l-accent-gold"
+                                >
+                                    <td className="px-6 md:px-8 py-6">
+                                        <div className="font-bold text-primary text-[17px] group-hover:text-primary transition-colors font-playfair truncate">{t.adSoyad}</div>
+                                        <div className="text-[12px] text-text-muted mt-1 opacity-80 truncate">{t.mail}</div>
+                                        <div className="text-[12px] text-text-muted opacity-80">{t.telefon}</div>
+                                    </td>
+                                    <td className="px-6 md:px-8 py-6 text-right">
+                                        <div className="flex justify-end">
+                                            <span className="inline-flex flex-col items-center justify-center min-w-[90px] md:min-w-[100px] py-2 px-3 md:px-4 bg-bg-primary rounded-2xl border border-border-light group-hover:border-accent-gold/40 transition-all shadow-sm group-hover:shadow-md group-hover:bg-white">
+                                                <span className="text-[11px] md:text-[12px] font-bold text-primary leading-tight font-playfair">{t.hangiGun.split(' ')[0]} {t.hangiGun.split(' ')[1]}</span>
+                                                <span className="text-[8px] md:text-[9px] font-extrabold text-text-muted uppercase tracking-[0.2em] mt-0.5">{t.hangiGun.split(' ')[2]}</span>
+                                            </span>
+                                        </div>
                                     </td>
                                 </tr>
-                            ) : filteredTickets.length === 0 ? (
-                                <tr>
-                                    <td colSpan={2} className="p-20 text-center text-text-muted italic text-sm">Kayıt bulunamadı.</td>
-                                </tr>
-                            ) : (
-                                filteredTickets.map((t: Ticket) => (
-                                    <tr
-                                        key={t.row}
-                                        onClick={() => onViewDetail(t)}
-                                        className="group hover:bg-primary/[0.02] cursor-pointer transition-all active:scale-[0.99]"
-                                    >
-                                        <td className="px-8 py-6">
-                                            <div className="font-bold text-primary text-[17px] group-hover:text-accent-gold transition-colors font-playfair">{t.adSoyad}</div>
-                                            <div className="text-[12px] text-text-muted mt-1 opacity-80">{t.mail}</div>
-                                            <div className="text-[12px] text-text-muted opacity-80">{t.telefon}</div>
-                                        </td>
-                                        <td className="px-8 py-6 text-right">
-                                            <span className="inline-flex flex-col items-center justify-center min-w-[100px] py-2 px-4 bg-bg-primary rounded-2xl border border-border-light group-hover:border-accent-gold/40 transition-all shadow-sm">
-                                                <span className="text-[12px] font-bold text-primary leading-tight font-playfair">{t.hangiGun.split(' ')[0]} {t.hangiGun.split(' ')[1]}</span>
-                                                <span className="text-[9px] font-extrabold text-text-muted uppercase tracking-[0.2em] mt-0.5">{t.hangiGun.split(' ')[2]}</span>
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                            ))
+                        )}
+                    </tbody>
+                </table>
             </div>
         </motion.div>
     );

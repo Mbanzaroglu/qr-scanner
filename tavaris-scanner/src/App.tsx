@@ -118,7 +118,7 @@ const App = () => {
 
         {/* View Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12 min-h-0">
-          <div className="max-w-7xl mx-auto h-full">
+          <div className="max-w-7xl mx-auto min-h-full">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -126,7 +126,7 @@ const App = () => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.2 }}
-                className="h-full"
+                className="min-h-full"
               >
                 {activeTab === 'dashboard' && <Dashboard stats={dashboardStats?.stats || null} />}
                 {activeTab === 'tickets' && (
