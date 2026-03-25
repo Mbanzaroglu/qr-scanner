@@ -12,7 +12,7 @@ const BottomNav = () => {
     ];
 
     return (
-        <nav className="md:hidden glass fixed bottom-0 left-0 right-0 h-20 border-t border-border-light flex items-center justify-around px-4 z-[50] pb-2">
+        <nav className="glass fixed bottom-0 left-0 right-0 z-[50] flex items-center justify-around border-t border-border-light px-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] pt-2 md:hidden min-h-[4.5rem]">
             {tabs.map((tab) => (
                 <button
                     key={tab.id}

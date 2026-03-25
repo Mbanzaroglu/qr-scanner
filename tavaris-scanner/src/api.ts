@@ -1,4 +1,35 @@
-const API_URL = 'https://script.google.com/macros/s/AKfycbwCr9kPQtKWLeqDhfCfX9dtlWvyc5GHwf1nM0djj1nL4yOW9slve2Mzsk-2Bw2aHqg7Vg/exec';
+const API_URL =
+    import.meta.env.VITE_APPS_SCRIPT_URL ||
+    'https://script.google.com/macros/s/AKfycbwCr9kPQtKWLeqDhfCfX9dtlWvyc5GHwf1nM0djj1nL4yOW9slve2Mzsk-2Bw2aHqg7Vg/exec';
+    
+
+/** Tek gösterim günü — sheet + scanner sekmeleri ile uyumlu */
+export interface EventShowConfig {
+    token: string;
+    label: string;
+    saat: string;
+    limit: number;
+    /** Dar ekran sekmesi (boşsa label kullanılır) */
+    tabLabel: string;
+}
+
+/** GAS `Etkinlik Ayarları` sayfasından gelen genel etkinlik bilgisi */
+export interface EventPublicConfig {
+    eventName: string;
+    venue: string;
+    address: string;
+    cityBadge: string;
+    appBrandName: string;
+    doorTime: string;
+    gun1: EventShowConfig;
+    gun2: EventShowConfig;
+}
+
+export interface EventConfigResponse {
+    success: boolean;
+    config?: EventPublicConfig;
+    error?: string;
+}
 
 export interface Ticket {
     row: number;
@@ -65,7 +96,29 @@ export interface Stats {
     limit: number;
 }
 
+/** Apps Script aksiyonlari genel basari/ hata cevabi */
+export interface ApiActionResult {
+    success: boolean;
+    message?: string;
+    error?: string;
+    okutulan?: number;
+    toplam?: number;
+}
+
+function eventConfigUrl(): string {
+    const sep = API_URL.indexOf('?') >= 0 ? '&' : '?';
+    return `${API_URL}${sep}action=eventConfig`;
+}
+
 export const api = {
+    /**
+     * Etkinlik metinleri ve gün token’ları (PIN gerekmez; Web App herkese açık deploy ile çalışır).
+     */
+    async getPublicEventConfig(): Promise<EventConfigResponse> {
+        const response = await fetch(eventConfigUrl(), { method: 'GET' });
+        return response.json();
+    },
+
     async verifyQR(qr: string, date: string, pin: string): Promise<VerifyResult> {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -120,7 +173,7 @@ export const api = {
         return response.json();
     },
 
-    async manualCheckIn(row: number, biletNo: number, pin: string): Promise<any> {
+    async manualCheckIn(row: number, biletNo: number, pin: string): Promise<ApiActionResult> {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
@@ -129,7 +182,7 @@ export const api = {
         return response.json();
     },
 
-    async manualCheckInAll(row: number, pin: string): Promise<any> {
+    async manualCheckInAll(row: number, pin: string): Promise<ApiActionResult> {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
@@ -138,7 +191,7 @@ export const api = {
         return response.json();
     },
 
-    async updatePayment(row: number, status: boolean, pin: string): Promise<any> {
+    async updatePayment(row: number, status: boolean, pin: string): Promise<ApiActionResult> {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
@@ -147,7 +200,7 @@ export const api = {
         return response.json();
     },
 
-    async resendQr(row: number, pin: string): Promise<any> {
+    async resendQr(row: number, pin: string): Promise<ApiActionResult> {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },

@@ -1,121 +1,210 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState } from 'react';
 import jsQR from 'jsqr';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, AlertCircle, Smartphone, Keyboard, RefreshCw } from 'lucide-react';
+import { Camera, AlertCircle, Smartphone, Keyboard, RefreshCw, Mail } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { compactShowTabLabel } from '../lib/showTabLabel';
 
 interface ScannerViewProps {
     onScan: (data: string) => void;
+    /** Manuel sekme: e-posta ile arama + doğrulama (kamera kullanılmaz) */
+    onManualEmailLookup: (email: string) => void;
     isProcessing: boolean;
 }
 
-const ScannerView: React.FC<ScannerViewProps> = ({ onScan, isProcessing }) => {
-    const { selectedDate, setSelectedDate } = useAppContext();
+const ScannerView: React.FC<ScannerViewProps> = ({ onScan, onManualEmailLookup, isProcessing }) => {
+    const { selectedDate, setSelectedDate, eventConfig } = useAppContext();
     const [mode, setMode] = useState<'camera' | 'manual'>('camera');
-    // ... [previous imports and effects remain same, just adding context and tabs]
-    const [manualInput, setManualInput] = useState('');
+    const [emailInput, setEmailInput] = useState('');
     const [cameraError, setCameraError] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    /** Parent her render'da yeni fonksiyon verse bile kamera effect'i yeniden başlamasın */
+    const onScanRef = useRef(onScan);
+    onScanRef.current = onScan;
+    const isProcessingRef = useRef(isProcessing);
+    isProcessingRef.current = isProcessing;
+    const modeRef = useRef(mode);
+    modeRef.current = mode;
 
-    useEffect(() => {
-        let animationFrameId: number;
+    /**
+     * Kamera: layout sonrası çalıştır (video ref hazır olsun). getUserMedia sonrası ref bazen null kalıyordu.
+     */
+    useLayoutEffect(() => {
+        let animationFrameId = 0;
         let stream: MediaStream | null = null;
+        let cancelled = false;
+
+        const stopTracks = () => {
+            stream?.getTracks().forEach((track) => track.stop());
+            stream = null;
+        };
+
+        const waitForVideoEl = async (): Promise<HTMLVideoElement | null> => {
+            for (let i = 0; i < 45; i++) {
+                if (cancelled || modeRef.current !== 'camera') return null;
+                const el = videoRef.current;
+                if (el) return el;
+                await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            }
+            return null;
+        };
+
+        const openCamera = async (): Promise<MediaStream> => {
+            const md = navigator.mediaDevices;
+            if (!md?.getUserMedia) {
+                throw new Error('no-api');
+            }
+            try {
+                return await md.getUserMedia({
+                    audio: false,
+                    video: { facingMode: { ideal: 'environment' } },
+                });
+            } catch {
+                try {
+                    return await md.getUserMedia({
+                        audio: false,
+                        video: { facingMode: 'user' },
+                    });
+                } catch {
+                    return await md.getUserMedia({ audio: false, video: true });
+                }
+            }
+        };
 
         const startCamera = async () => {
-            if (mode !== 'camera') return;
+            if (modeRef.current !== 'camera') return;
+            setCameraError(null);
+
             try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' }
-                });
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    videoRef.current.setAttribute('playsinline', 'true');
-                    videoRef.current.play();
-                    requestAnimationFrame(tick);
+                const media = await openCamera();
+                if (cancelled || modeRef.current !== 'camera') {
+                    media.getTracks().forEach((t) => t.stop());
+                    return;
                 }
-            } catch (err) {
-                setCameraError('Kameraya erişilemedi. Lütfen izinleri kontrol edin.');
-            }
-        };
+                stream = media;
 
-        const tick = () => {
-            if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-                const video = videoRef.current;
-                const canvas = canvasRef.current;
-                if (canvas) {
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                    if (ctx) {
-                        canvas.height = video.videoHeight;
-                        canvas.width = video.videoWidth;
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                            inversionAttempts: 'dontInvert',
-                        });
+                const video = await waitForVideoEl();
+                if (!video || cancelled || modeRef.current !== 'camera') {
+                    stopTracks();
+                    if (!cancelled && modeRef.current === 'camera') {
+                        setCameraError(
+                            'Kamera önizlemesi başlatılamadı. Sayfayı yenileyin veya başka sekmeye geçip KAMERA’ya dönün.'
+                        );
+                    }
+                    return;
+                }
 
-                        if (code && !isProcessing) {
-                            onScan(code.data);
+                video.setAttribute('playsinline', 'true');
+                video.setAttribute('webkit-playsinline', 'true');
+                video.muted = true;
+                video.srcObject = stream;
+                await video.play().catch(() => {
+                    /* iOS ilk play reddi */
+                });
+
+                const tick = () => {
+                    if (cancelled) return;
+                    const v = videoRef.current;
+                    const canvas = canvasRef.current;
+                    if (
+                        v &&
+                        canvas &&
+                        v.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA &&
+                        v.videoWidth > 0 &&
+                        v.videoHeight > 0
+                    ) {
+                        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                        if (ctx) {
+                            canvas.width = v.videoWidth;
+                            canvas.height = v.videoHeight;
+                            ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                                inversionAttempts: 'dontInvert',
+                            });
+                            if (code && !isProcessingRef.current) {
+                                onScanRef.current(code.data);
+                            }
                         }
                     }
+                    animationFrameId = requestAnimationFrame(tick);
+                };
+                animationFrameId = requestAnimationFrame(tick);
+            } catch {
+                if (!cancelled) {
+                    setCameraError(
+                        'Kameraya erişilemedi. Tarayıcı iznini kontrol edin; adres çubuğunda HTTPS veya localhost olmalı.'
+                    );
                 }
             }
-            animationFrameId = requestAnimationFrame(tick);
         };
 
-        startCamera();
+        if (mode === 'camera') {
+            startCamera();
+        }
 
         return () => {
+            cancelled = true;
             cancelAnimationFrame(animationFrameId);
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
+            stopTracks();
+            const v = videoRef.current;
+            if (v) v.srcObject = null;
         };
-    }, [mode, isProcessing, onScan]);
+    }, [mode]);
 
-    const handleManualSubmit = (e: React.FormEvent) => {
+    const handleEmailSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (manualInput.trim()) {
-            onScan(manualInput.trim());
-            setManualInput('');
+        const trimmed = emailInput.trim();
+        if (trimmed) {
+            onManualEmailLookup(trimmed);
+            setEmailInput('');
         }
     };
 
     useEffect(() => {
+        if (!eventConfig) return;
         if (selectedDate === null) {
-            setSelectedDate('6');
+            setSelectedDate(eventConfig.gun1.token);
         }
-    }, [selectedDate, setSelectedDate]);
+    }, [eventConfig, selectedDate, setSelectedDate]);
 
     return (
-        <div className="flex flex-col h-full space-y-4">
-            {/* Header & Date Selection */}
-            <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
+        <div className="flex h-full min-h-0 flex-1 flex-col gap-2 md:gap-4">
+            {/* Üst kontroller — shrink-0; kamera alanı kalan tüm yüksekliği alır */}
+            <div className="flex shrink-0 flex-col gap-2 md:gap-4">
+                <div className="flex items-center justify-between max-md:py-0.5">
                     <div className="flex items-center gap-2 text-primary">
-                        <Camera size={20} />
-                        <span className="font-playfair font-bold text-lg">Hızlı Tarama</span>
+                        <Camera size={18} className="md:h-5 md:w-5" />
+                        <span className="font-playfair text-base font-bold md:text-lg">Hızlı Tarama</span>
                     </div>
                 </div>
 
-                <div className="flex bg-white/80 p-1 rounded-soft border border-border-light backdrop-blur-md shadow-sm">
-                    <button
-                        onClick={() => setSelectedDate('6')}
-                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-soft transition-all ${selectedDate === '6' ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:text-primary'}`}
-                    >
-                        6 Mart
-                    </button>
-                    <button
-                        onClick={() => setSelectedDate('9')}
-                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-soft transition-all ${selectedDate === '9' ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:text-primary'}`}
-                    >
-                        9 Mart
-                    </button>
+                <div className="flex rounded-soft border border-border-light bg-white/80 p-1 shadow-sm backdrop-blur-md">
+                    {eventConfig ? (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedDate(eventConfig.gun1.token)}
+                                className={`flex-1 whitespace-nowrap py-2 text-[10px] font-black uppercase tracking-widest rounded-soft transition-all ${selectedDate === eventConfig.gun1.token ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:text-primary'}`}
+                            >
+                                {compactShowTabLabel(eventConfig.gun1.tabLabel)}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedDate(eventConfig.gun2.token)}
+                                className={`flex-1 whitespace-nowrap py-2 text-[10px] font-black uppercase tracking-widest rounded-soft transition-all ${selectedDate === eventConfig.gun2.token ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:text-primary'}`}
+                            >
+                                {compactShowTabLabel(eventConfig.gun2.tabLabel)}
+                            </button>
+                        </>
+                    ) : (
+                        <div className="flex-1 py-2 text-center text-[10px] text-text-muted">Günler yükleniyor…</div>
+                    )}
                 </div>
             </div>
 
-            {/* Mode Switcher */}
-            <div className="flex bg-white/50 p-1 rounded-soft border border-border-light backdrop-blur-sm shadow-sm">
+            <div className="flex shrink-0 rounded-soft border border-border-light bg-white/50 p-1 shadow-sm backdrop-blur-sm">
                 <button
                     onClick={() => setMode('camera')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 text-[11px] font-black uppercase tracking-widest rounded-soft transition-all ${mode === 'camera' ? 'bg-primary text-white shadow-lg' : 'text-text-muted hover:text-primary'}`}
@@ -126,43 +215,45 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, isProcessing }) => {
                     onClick={() => setMode('manual')}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 text-[11px] font-black uppercase tracking-widest rounded-soft transition-all ${mode === 'manual' ? 'bg-primary text-white shadow-lg' : 'text-text-muted hover:text-primary'}`}
                 >
-                    <Keyboard size={14} /> MANUEL
+                    <Keyboard size={14} /> E-POSTA
                 </button>
             </div>
 
-            {/* Scanner Area */}
-            <div className="flex-1 min-h-0 card relative bg-black flex flex-col items-center justify-center overflow-hidden border-border-elegant">
+            <div className="card relative flex min-h-[min(52dvh,420px)] flex-1 flex-col items-center justify-center overflow-hidden border-border-elegant bg-black md:min-h-[min(60dvh,520px)] max-md:rounded-lg">
                 {mode === 'camera' ? (
                     <>
                         {cameraError ? (
-                            <div className="text-white text-center p-8 space-y-4">
+                            <div className="text-white text-center p-8 space-y-4 z-20">
                                 <AlertCircle size={40} className="mx-auto text-accent" />
                                 <p className="text-sm">{cameraError}</p>
                             </div>
                         ) : (
                             <>
-                                <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" muted />
+                                <video
+                                    ref={videoRef}
+                                    className="absolute inset-0 z-0 h-full w-full object-cover"
+                                    muted
+                                    playsInline
+                                    autoPlay
+                                />
                                 <canvas ref={canvasRef} className="hidden" />
 
-                                {/* Overlay / Frame */}
-                                <div className="absolute inset-0 flex items-center justify-center p-10">
-                                    <div className="relative w-full aspect-square max-w-[280px]">
-                                        {/* Corners */}
+                                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-3 md:p-10">
+                                    <div className="relative aspect-[3/4] w-[min(100%,min(92vw,22rem))] max-h-[min(76dvh,100%)] md:aspect-square md:max-h-none md:max-w-[280px]">
                                         <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-accent-gold rounded-tl-2xl shadow-[0_0_15px_rgba(212,168,83,0.5)]" />
                                         <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-accent-gold rounded-tr-2xl shadow-[0_0_15px_rgba(212,168,83,0.5)]" />
                                         <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-accent-gold rounded-bl-2xl shadow-[0_0_15px_rgba(212,168,83,0.5)]" />
                                         <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-accent-gold rounded-br-2xl shadow-[0_0_15px_rgba(212,168,83,0.5)]" />
 
-                                        {/* Scan Line */}
                                         <motion.div
                                             animate={{ top: ['10%', '90%', '10%'] }}
                                             transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-                                            className="absolute left-0 right-0 h-0.5 bg-accent shadow-[0_0_15px_rgba(196,30,58,0.8)] z-10"
+                                            className="absolute left-0 right-0 z-10 h-0.5 bg-accent shadow-[0_0_15px_rgba(196,30,58,0.8)]"
                                         />
                                     </div>
                                 </div>
-                                <div className="absolute bottom-6 left-0 right-0 text-center">
-                                    <span className="bg-black/40 backdrop-blur-md text-white/90 text-[10px] font-bold tracking-[0.2em] px-4 py-2 rounded-full border border-white/10 uppercase">
+                                <div className="pointer-events-none absolute bottom-6 left-0 right-0 z-10 text-center">
+                                    <span className="inline-block bg-black/40 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/90 backdrop-blur-md rounded-full border border-white/10">
                                         QR Kodu Hizalayın
                                     </span>
                                 </div>
@@ -170,22 +261,29 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, isProcessing }) => {
                         )}
                     </>
                 ) : (
-                    <div className="bg-bg-primary absolute inset-0 flex flex-col p-8 items-center justify-center space-y-6">
-                        <div className="w-16 h-16 bg-primary/5 rounded-2xl flex items-center justify-center text-primary mb-2 shadow-sm border border-border-light">
-                            <Keyboard size={32} />
+                    <div className="absolute inset-0 z-20 flex min-h-0 flex-col items-center justify-center space-y-3 overflow-hidden bg-bg-primary p-4 md:space-y-6 md:p-8">
+                        <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-2xl border border-border-light bg-primary/5 text-primary shadow-sm">
+                            <Mail size={32} />
                         </div>
-                        <h3 className="text-xl">Manuel Giriş</h3>
-                        <form onSubmit={handleManualSubmit} className="w-full max-w-sm space-y-4">
-                            <textarea
-                                value={manualInput}
-                                onChange={(e) => setManualInput(e.target.value)}
-                                placeholder="QR kodunun içeriğini buraya yapıştırın veya manuel girin..."
-                                className="w-full bg-white border-2 border-border-light rounded-soft p-5 text-sm font-mono h-32 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all resize-none shadow-sm"
+                        <h3 className="text-xl">E-posta ile sorgula</h3>
+                        <p className="max-w-sm text-center text-xs text-text-muted">
+                            Kayıtlı e-postayı girin. Biletler numaralı listelenir; girişi her bilet için ayrı onaylayın
+                            (sorgu tek başına okutma sayılmaz).
+                        </p>
+                        <form onSubmit={handleEmailSubmit} className="w-full max-w-sm space-y-4">
+                            <input
+                                type="email"
+                                inputMode="email"
+                                autoComplete="email"
+                                value={emailInput}
+                                onChange={(e) => setEmailInput(e.target.value)}
+                                placeholder="ornek@mail.com"
+                                className="w-full rounded-soft border-2 border-border-light bg-white p-4 text-sm shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/5"
                             />
                             <button
                                 type="submit"
-                                disabled={!manualInput.trim() || isProcessing}
-                                className="w-full bg-primary text-white font-bold py-4 rounded-soft hover:bg-primary/90 disabled:opacity-50 shadow-lg shadow-primary/20 transition-all tracking-widest text-[11px] uppercase"
+                                disabled={!emailInput.trim() || isProcessing}
+                                className="w-full rounded-soft bg-primary py-4 text-[11px] font-bold uppercase tracking-widest text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 disabled:opacity-50"
                             >
                                 BİLETİ SORGULA
                             </button>
@@ -193,20 +291,19 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, isProcessing }) => {
                     </div>
                 )}
 
-                {/* Processing Overlay */}
                 <AnimatePresence>
                     {isProcessing && (
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="absolute inset-0 z-30 bg-primary/95 flex flex-col items-center justify-center text-center p-10 space-y-5 backdrop-blur-md"
+                            className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-primary/95 p-10 text-center backdrop-blur-md"
                         >
                             <div className="relative">
                                 <motion.div
                                     animate={{ rotate: 360 }}
                                     transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
-                                    className="w-16 h-16 border-4 border-white/20 border-t-accent-gold rounded-full"
+                                    className="h-16 w-16 rounded-full border-4 border-white/20 border-t-accent-gold"
                                 />
                                 <motion.div
                                     animate={{ scale: [1, 1.2, 1] }}
@@ -217,8 +314,10 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, isProcessing }) => {
                                 </motion.div>
                             </div>
                             <div className="space-y-1">
-                                <h4 className="text-white font-bold text-lg tracking-widest uppercase">SORGULANIYOR</h4>
-                                <p className="text-white/50 text-[10px] font-medium tracking-tight">Lütfen bekleyin, veritabanı kontrol ediliyor...</p>
+                                <h4 className="text-lg font-bold uppercase tracking-widest text-white">SORGULANIYOR</h4>
+                                <p className="text-[10px] font-medium tracking-tight text-white/50">
+                                    Lütfen bekleyin, kayıt kontrol ediliyor…
+                                </p>
                             </div>
                         </motion.div>
                     )}

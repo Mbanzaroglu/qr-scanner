@@ -4,6 +4,7 @@ import { Search, ChevronDown, Check } from 'lucide-react';
 import { api } from '../api';
 import type { Ticket } from '../api';
 import { useAppContext } from '../context/AppContext';
+import { compactShowTabLabel } from '../lib/showTabLabel';
 
 interface TicketsProps {
     onViewDetail: (ticket: Ticket) => void;
@@ -11,7 +12,7 @@ interface TicketsProps {
 }
 
 const Tickets = ({ onViewDetail }: TicketsProps) => {
-    const { pin, selectedDate, setSelectedDate } = useAppContext();
+    const { pin, selectedDate, setSelectedDate, eventConfig } = useAppContext();
     const [query, setQuery] = useState('');
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [filteredTickets, setFilteredTickets] = useState<Ticket[]>([]);
@@ -60,8 +61,24 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
                 {/* Date Tabs - Centered & Fitted */}
                 <div className="flex bg-white/80 p-1.5 rounded-soft border border-border-light backdrop-blur-md shadow-sm w-full max-w-md mx-auto">
                     <DateTab label="Tümü" active={selectedDate === null} onClick={() => setSelectedDate(null)} />
-                    <DateTab label="6 Mart" active={selectedDate === '6'} onClick={() => setSelectedDate('6')} />
-                    <DateTab label="9 Mart" active={selectedDate === '9'} onClick={() => setSelectedDate('9')} />
+                    {eventConfig ? (
+                        <>
+                            <DateTab
+                                label={compactShowTabLabel(eventConfig.gun1.tabLabel)}
+                                active={selectedDate === eventConfig.gun1.token}
+                                onClick={() => setSelectedDate(eventConfig.gun1.token)}
+                            />
+                            <DateTab
+                                label={compactShowTabLabel(eventConfig.gun2.tabLabel)}
+                                active={selectedDate === eventConfig.gun2.token}
+                                onClick={() => setSelectedDate(eventConfig.gun2.token)}
+                            />
+                        </>
+                    ) : (
+                        <div className="flex-[2] flex items-center justify-center py-2.5 text-[11px] text-text-muted">
+                            Günler yükleniyor…
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -141,8 +158,9 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
 
 const DateTab = ({ label, active, onClick }: any) => (
     <button
+        type="button"
         onClick={onClick}
-        className={`flex-1 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest rounded-soft transition-all ${active ? 'bg-primary text-white shadow-lg' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
+        className={`flex-1 whitespace-nowrap px-2 py-2.5 text-[10px] font-bold uppercase tracking-widest rounded-soft transition-all sm:px-3 sm:text-[11px] ${active ? 'bg-primary text-white shadow-lg' : 'text-text-muted hover:bg-primary/5 hover:text-primary'}`}
     >
         {label}
     </button>

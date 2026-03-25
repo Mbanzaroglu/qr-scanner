@@ -4,7 +4,7 @@ import { LayoutDashboard, Ticket, Scan, LogOut, ChevronLeft, ChevronRight } from
 import { useAppContext } from '../context/AppContext';
 
 const Sidebar = () => {
-    const { activeTab, setActiveTab, setPin } = useAppContext();
+    const { activeTab, setActiveTab, setPin, appBrandName, eventTitle } = useAppContext();
     const [collapsed, setCollapsed] = useState(false);
 
     const navItems = [
@@ -21,14 +21,21 @@ const Sidebar = () => {
             {/* Logo area */}
             <div className="p-8 flex items-center gap-4 border-b border-border-light/50 overflow-hidden">
                 <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-accent-gold shadow-lg shrink-0">
-                    <span className="font-playfair text-xl font-bold">T</span>
+                    <span className="font-playfair text-xl font-bold">
+                        {eventTitle.charAt(0).toUpperCase()}
+                    </span>
                 </div>
                 {!collapsed && (
                     <motion.div
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        className="font-playfair text-2xl font-bold tracking-tight text-primary whitespace-nowrap"
+                        className="min-w-0 font-playfair text-xl font-bold tracking-tight text-primary"
                     >
-                        Tavariş
+                        <span className="block truncate">{eventTitle}</span>
+                        {appBrandName !== eventTitle && (
+                            <span className="mt-0.5 block truncate text-xs font-semibold uppercase tracking-widest text-text-muted">
+                                {appBrandName}
+                            </span>
+                        )}
                     </motion.div>
                 )}
             </div>

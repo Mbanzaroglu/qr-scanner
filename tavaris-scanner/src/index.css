@@ -39,9 +39,17 @@
     @apply border-border-light;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    max-height: 100dvh;
+  }
+
   body {
     @apply bg-bg-primary text-text-secondary font-inter antialiased;
     background-image: radial-gradient(circle at 50% 50%, rgba(212, 168, 83, 0.03) 0%, transparent 100%);
+    overflow: hidden;
   }
 
   h1,

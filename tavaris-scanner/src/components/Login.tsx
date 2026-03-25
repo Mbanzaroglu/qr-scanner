@@ -1,15 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Theater, Lock, ShieldCheck } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
 
 interface LoginProps {
     onLogin: (pin: string) => void;
 }
 
 const Login = ({ onLogin }: LoginProps) => {
+    const { eventConfig, loadEventConfig, appBrandName, eventTitle } = useAppContext();
     const [pin, setPin] = useState('');
     const [error, setError] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        loadEventConfig();
+    }, [loadEventConfig]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -56,7 +62,14 @@ const Login = ({ onLogin }: LoginProps) => {
                         />
                     </motion.div>
                     <div className="space-y-1">
-                        <h1 className="text-4xl">Tavariş</h1>
+                        <h1 className="text-4xl">{eventTitle}</h1>
+                        <p className="text-primary/80 font-semibold text-sm px-2">
+                            {eventConfig?.venue
+                                ? `${eventConfig.venue}${eventConfig.cityBadge ? ` · ${eventConfig.cityBadge}` : ''}`
+                                : appBrandName !== eventTitle
+                                  ? appBrandName
+                                  : 'Etkinlik yükleniyor…'}
+                        </p>
                         <p className="text-text-muted font-bold uppercase tracking-[0.3em] text-[10px]">Görevli Girişi</p>
                     </div>
                 </div>
@@ -101,7 +114,7 @@ const Login = ({ onLogin }: LoginProps) => {
 
                     <div className="flex items-center gap-3 p-4 bg-bg-primary rounded-soft border border-border-light text-text-muted italic text-[11px] leading-relaxed">
                         <Lock size={24} className="opacity-50 shrink-0" />
-                        Bu panel sadece yetkili Tavariş görevlileri içindir. Lütfen şifrenizi kimseyle paylaşmayın.
+                        Bu panel sadece yetkili {eventTitle} görevlileri içindir. Lütfen şifrenizi kimseyle paylaşmayın.
                     </div>
                 </div>
             </motion.div>

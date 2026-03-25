@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useAppContext } from '../context/AppContext';
 
 interface HeaderProps {
     isOnline: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({ isOnline }) => {
+    const { eventTitle } = useAppContext();
     const [time, setTime] = useState(new Date());
 
     useEffect(() => {
@@ -31,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({ isOnline }) => {
 
             <div className="relative z-10">
                 <div className="font-inter text-[10px] font-semibold tracking-[6px] text-accent-gold uppercase mb-1">Ankara</div>
-                <h1 className="font-playfair text-4xl font-medium text-white tracking-[3px] drop-shadow-md">Tavariş</h1>
+                <h1 className="font-playfair text-4xl font-medium text-white tracking-[3px] drop-shadow-md">{eventTitle}</h1>
                 <div className="text-[11px] font-medium tracking-[4px] text-white/70 uppercase mt-1">Bilet Kontrol Sistemi</div>
                 <div className="flex items-center justify-center gap-2 mt-3 text-xs text-white/60">
                     <span>{formatDate(time)}</span>
