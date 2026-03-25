@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Users, Ticket, CheckCircle, Clock } from 'lucide-react';
 import type { DayStats } from '../api';
+import { useShowDateLabel } from '../hooks/useShowDateLabel';
 
 interface DashboardProps {
     stats: {
@@ -48,11 +49,13 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
     );
 };
 
-const EventCard = ({ dayStats }: { dayStats: DayStats }) => (
+const EventCard = ({ dayStats }: { dayStats: DayStats }) => {
+    const dateTitle = useShowDateLabel(dayStats.label);
+    return (
     <div className="card card-hover p-6 md:p-8 space-y-6">
         <div className="flex justify-between items-start">
             <div>
-                <h2 className="text-2xl md:text-3xl mb-1">{dayStats.label}</h2>
+                <h2 className="text-2xl md:text-3xl mb-1">{dateTitle}</h2>
                 <span className="px-3 py-1 bg-accent-gold/10 text-accent-gold text-xs font-bold rounded-full border border-accent-gold/20">
                     KAPASİTE: {dayStats.limit}
                 </span>
@@ -84,7 +87,8 @@ const EventCard = ({ dayStats }: { dayStats: DayStats }) => (
             <StatSmall label="Kalan Bilet" value={dayStats.kalan} icon={<Clock size={14} />} color="accent-gold" />
         </div>
     </div>
-);
+    );
+};
 
 const StatSmall = ({ label, value, icon, color }: any) => {
     const colorClasses: any = {

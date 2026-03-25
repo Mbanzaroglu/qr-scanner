@@ -19,6 +19,7 @@ const STAT_SHEET_NAME = 'Form İstatistikleri';
 
 // Scanner / dashboard / form gun eslemesi: "Etkinlik Ayarlari" sayfasi (getEventConfig_)
 const CONFIG_SHEET_NAME = 'Etkinlik Ayarları';
+// "Form İstatistikleri" icindeki "Etkinlik Bilgileri": 1. satir baslik, 2. satir veri; G–P sabit sütunlar (B/C satir 2 istatistik sayaci ile cakismaz)
 
 // Mail HTML ve konu satirlari — sheet ile degismez; buradan duzenleyin
 const ETKINLIK_ADI = 'Aşk Öldürür';
@@ -68,6 +69,19 @@ const STAT_ROW_KALAN = 4;
 const STAT_COL_GUN_1 = 2; // B
 const STAT_COL_GUN_2 = 3; // C
 
+// Etkinlik Bilgileri (Form İstatistikleri): 1. satir baslik (okunmaz), 2. satir veri; G–P sabit
+const STAT_EVT_ROW_DATA = 2;
+const STAT_EVT_COL_EVENT_NAME = 7; // G
+const STAT_EVT_COL_VENUE = 8; // H
+const STAT_EVT_COL_ADDRESS = 9; // I
+const STAT_EVT_COL_DOOR_TIME = 10; // J
+const STAT_EVT_COL_GUN_1_LABEL = 11; // K
+const STAT_EVT_COL_GUN_1_SAAT = 12; // L
+const STAT_EVT_COL_GUN_2_LABEL = 13; // M
+const STAT_EVT_COL_GUN_2_SAAT = 14; // N
+const STAT_EVT_COL_ADMIN_EMAIL = 15; // O
+const STAT_EVT_COL_TEST_EMAIL = 16; // P
+
 // Web App URL (mevcut deployment URL'n varsa burada guncelle)
 const WEB_APP_BASE_URL = 'https://script.google.com/macros/s/AKfycbxJhTRpH1OOW-t4Ry-bZnVeSLkzINbolPcxeZHtiuI3HJgbyAUbqXtYm-6OjEIrROkvvA/exec';
 
@@ -102,6 +116,142 @@ function readEventConfigMap_() {
   return map;
 }
 
+/** Iki basamakli saat (9 -> "09") */
+function pad2Hour_(h) {
+  return h < 10 ? '0' + h : String(h);
+}
+
+/** Saat tipi hucre (Date veya "19:30:00") -> "19:30" (saniye yok) */
+function statTableTimeCellToString_(val) {
+  if (val === null || val === undefined) return '';
+  if (Object.prototype.toString.call(val) === '[object Date]') {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'HH:mm');
+  }
+  const s = String(val).trim();
+  if (!s) return '';
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (m) {
+    const h = parseInt(m[1], 10);
+    const mm = m[2];
+    if (h >= 0 && h <= 23) return pad2Hour_(h) + ':' + mm;
+  }
+  return s;
+}
+
+/** Tarih tipi hucre -> "dd.MM.yyyy" (saat ekleme; etiket/mail icin) */
+function statTableDateCellToString_(val) {
+  if (val === null || val === undefined) return '';
+  if (Object.prototype.toString.call(val) === '[object Date]') {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+  }
+  return String(val).trim();
+}
+
+/** Metin sutunlari; tesadufen Date ise yine tarih olarak yaz */
+function statTableTextCellToString_(val) {
+  if (val === null || val === undefined) return '';
+  if (Object.prototype.toString.call(val) === '[object Date]') {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+  }
+  return String(val).trim();
+}
+
+/**
+ * Form Istatistikleri: Etkinlik Bilgileri — STAT_EVT_ROW_DATA satirinda G–P hucreleri (basliklar STAT_EVT_ROW_HEADER).
+ * Baslik metnine bakilmaz; konum diger istatistik hucreleri gibi sabittir.
+ */
+function readEventInfoTableFromStatSheet_() {
+  const sh = getStatSheet_();
+  if (!sh) return {};
+
+  const lastCol = sh.getLastColumn();
+  if (lastCol < STAT_EVT_COL_EVENT_NAME) return {};
+
+  const range = sh.getRange(
+    STAT_EVT_ROW_DATA,
+    STAT_EVT_COL_EVENT_NAME,
+    STAT_EVT_ROW_DATA,
+    STAT_EVT_COL_TEST_EMAIL
+  );
+  const row = range.getValues()[0];
+
+  const pairs = [
+    ['EVENT_NAME', row[0], 'text'],
+    ['EVENT_VENUE', row[1], 'text'],
+    ['EVENT_ADDRESS', row[2], 'text'],
+    ['DOOR_TIME', row[3], 'time'],
+    ['GUN_1_LABEL', row[4], 'date'],
+    ['GUN_1_SAAT', row[5], 'time'],
+    ['GUN_2_LABEL', row[6], 'date'],
+    ['GUN_2_SAAT', row[7], 'time'],
+    ['ADMIN_EMAIL', row[8], 'text'],
+    ['TEST_EMAIL', row[9], 'text']
+  ];
+
+  const map = {};
+  for (let i = 0; i < pairs.length; i++) {
+    const v = pairs[i][1];
+    const kind = pairs[i][2];
+    let strVal = '';
+    if (kind === 'time') strVal = statTableTimeCellToString_(v);
+    else if (kind === 'date') strVal = statTableDateCellToString_(v);
+    else strVal = statTableTextCellToString_(v);
+    if (strVal !== '') map[pairs[i][0]] = strVal;
+  }
+  return map;
+}
+
+function mergeEventConfigMaps_() {
+  const fromAyar = readEventConfigMap_();
+  const fromStat = readEventInfoTableFromStatSheet_();
+  const m = {};
+  let k;
+  for (k in fromAyar) m[k] = fromAyar[k];
+  for (k in fromStat) m[k] = fromStat[k];
+  return m;
+}
+
+/** Tablodan admin mail; yoksa sabit ADMIN_EMAIL */
+function getAdminEmail_() {
+  const st = readEventInfoTableFromStatSheet_();
+  if (st.ADMIN_EMAIL && String(st.ADMIN_EMAIL).trim()) return String(st.ADMIN_EMAIL).trim();
+  return ADMIN_EMAIL;
+}
+
+/** Tablodan test mail; yoksa sabit TEST_EMAIL */
+function getTestEmail_() {
+  const st = readEventInfoTableFromStatSheet_();
+  if (st.TEST_EMAIL && String(st.TEST_EMAIL).trim()) return String(st.TEST_EMAIL).trim();
+  return TEST_EMAIL;
+}
+
+/** Gosteri etiketinden gun token (form E sutunu ile eslesme icin); "07..." -> "7" */
+function extractLeadingDayToken_(label) {
+  const m = String(label || '').match(/^(\d+)/);
+  if (!m) return '';
+  const n = parseInt(m[1], 10);
+  return isNaN(n) ? m[1] : String(n);
+}
+
+/** Sadece rakam token ise basamak sifirlarini kaldir (07 -> 7) */
+function normalizeNumericDayToken_(tok) {
+  const s = String(tok || '').trim();
+  if (/^\d+$/.test(s)) return String(parseInt(s, 10));
+  return s;
+}
+
+/** Tablo metnindeki "7 Nisan Salı" gibi sondaki hafta gununu kaldir (mail / UI) */
+function stripTrWeekdayFromShowDate_(label) {
+  const s = String(label || '').trim();
+  if (!s) return s;
+  return s
+    .replace(
+      /\s+(Pazartesi|Sali|Salı|Çarşamba|Carsamba|Perşembe|Persembe|Cuma|Cumartesi|Pazar)$/i,
+      ''
+    )
+    .trim();
+}
+
 function cellOrDefault_(m, key, def) {
   if (m[key] === null || m[key] === undefined || m[key] === '') return def;
   return m[key];
@@ -109,6 +259,7 @@ function cellOrDefault_(m, key, def) {
 
 /**
  * Sheet + ScriptCache (~5 dk). Ayar degisince clearEventConfigCache() calistir veya bekleyin.
+ * Oncelik: Form Istatistikleri (Etkinlik Bilgileri) > Etkinlik Ayarlari > script sabitleri
  */
 function getEventConfig_() {
   const cached = CacheService.getScriptCache().get('event_cfg_json_v1');
@@ -119,8 +270,9 @@ function getEventConfig_() {
       // devam: sheet'ten oku
     }
   }
-  const m = readEventConfigMap_();
-  // Tek kaynak: üstteki ETKINLIK_* / ETKINLIK_ADI sabitleri (sheet bos ise bunlar kullanilir)
+  const m = mergeEventConfigMaps_();
+  const statOnly = readEventInfoTableFromStatSheet_();
+
   const cfg = {
     eventName: String(cellOrDefault_(m, 'EVENT_NAME', ETKINLIK_ADI)),
     venue: String(cellOrDefault_(m, 'EVENT_VENUE', ETKINLIK_YER)),
@@ -139,6 +291,22 @@ function getEventConfig_() {
     gun2Limit: parseInt(cellOrDefault_(m, 'GUN_2_KONTENJAN', 270), 10) || 270,
     gun2Tab: String(cellOrDefault_(m, 'GUN_2_TAB', ''))
   };
+
+  if (statOnly.GUN_1_LABEL && !statOnly.GUN_1_TOKEN) {
+    const t1 = extractLeadingDayToken_(cfg.gun1Label);
+    if (t1) cfg.gun1Token = t1;
+  }
+  if (statOnly.GUN_2_LABEL && !statOnly.GUN_2_TOKEN) {
+    const t2 = extractLeadingDayToken_(cfg.gun2Label);
+    if (t2) cfg.gun2Token = t2;
+  }
+
+  cfg.gun1Token = normalizeNumericDayToken_(cfg.gun1Token);
+  cfg.gun2Token = normalizeNumericDayToken_(cfg.gun2Token);
+
+  if (statOnly.GUN_1_LABEL) cfg.gun1Label = stripTrWeekdayFromShowDate_(cfg.gun1Label);
+  if (statOnly.GUN_2_LABEL) cfg.gun2Label = stripTrWeekdayFromShowDate_(cfg.gun2Label);
+
   CacheService.getScriptCache().put('event_cfg_json_v1', JSON.stringify(cfg), 300);
   return cfg;
 }
@@ -182,11 +350,92 @@ function normalizeText_(value) {
   return value.toString().trim().toLowerCase();
 }
 
+/** Form E sutunu Date ise dd.MM.yyyy; aksi halde metin (scanner token "7" vb. korunur) */
+function hangiGunCellToNormString_(val) {
+  if (val === null || val === undefined) return '';
+  if (Object.prototype.toString.call(val) === '[object Date]') {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+  }
+  return String(val).trim();
+}
+
+function parseDdMmYyyyParts_(str) {
+  const s = String(str || '').trim().toLowerCase();
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!m) return null;
+  const d = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  const y = parseInt(m[3], 10);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { d: d, mo: mo, y: y };
+}
+
+function parseIsoDateParts_(str) {
+  const m = String(str || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const y = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  const d = parseInt(m[3], 10);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { d: d, mo: mo, y: y };
+}
+
+function sameYmd_(a, b) {
+  if (!a || !b) return false;
+  return a.d === b.d && a.mo === b.mo && a.y === b.y;
+}
+
+/**
+ * Satirdaki gun degeri (7, 07.04.2026, Date, "7 Nisan") yapilandirilmis gun ile ayni mi?
+ * Token "7" ile "07" ve etiket tarihi birbirini tutmali.
+ */
+function rowGunMatchesConfiguredGun_(rowNormLower, confToken, confLabel) {
+  const r = rowNormLower;
+  if (!r) return false;
+
+  const tNorm = normalizeText_(String(confToken || ''));
+  const lNorm = normalizeText_(String(confLabel || ''));
+
+  if (tNorm) {
+    if (r === tNorm) return true;
+    if (/^\d+$/.test(tNorm)) {
+      const tn = parseInt(tNorm, 10);
+      if (!isNaN(tn)) {
+        if (r === String(tn)) return true;
+        var reDay = new RegExp('(^|[^0-9])0*' + tn + '(?![0-9])');
+        if (reDay.test(r)) return true;
+      }
+    } else if (r.indexOf(tNorm) !== -1 || tNorm.indexOf(r) !== -1) {
+      return true;
+    }
+  }
+  if (lNorm && (r.indexOf(lNorm) !== -1 || lNorm.indexOf(r) !== -1)) return true;
+
+  const labelYmd = parseDdMmYyyyParts_(confLabel);
+  const rowYmdDd = parseDdMmYyyyParts_(rowNormLower);
+  if (labelYmd && rowYmdDd && sameYmd_(labelYmd, rowYmdDd)) return true;
+
+  const rowIso = parseIsoDateParts_(rowNormLower);
+  if (labelYmd && rowIso && sameYmd_(labelYmd, rowIso)) return true;
+
+  if (labelYmd) {
+    const m2 = r.match(/^(\d{1,2})(?:[\s.\-]|$)/);
+    if (m2 && parseInt(m2[1], 10) === labelYmd.d) return true;
+  }
+
+  const rInt = parseInt(r, 10);
+  const tInt = parseInt(tNorm, 10);
+  if (!isNaN(tInt) && !isNaN(rInt) && tInt === rInt) return true;
+
+  return false;
+}
+
 function getGunConfig_(gun) {
   const cfg = getEventConfig_();
-  const gunStr = normalizeText_(gun);
+  const gunStr = normalizeText_(hangiGunCellToNormString_(gun));
+  if (!gunStr) return null;
 
-  if (gunStr.indexOf(normalizeText_(cfg.gun1Token)) > -1 || gunStr.indexOf(normalizeText_(cfg.gun1Label)) > -1) {
+  if (rowGunMatchesConfiguredGun_(gunStr, cfg.gun1Token, cfg.gun1Label)) {
     return {
       key: 'gun1',
       token: cfg.gun1Token,
@@ -197,7 +446,7 @@ function getGunConfig_(gun) {
     };
   }
 
-  if (gunStr.indexOf(normalizeText_(cfg.gun2Token)) > -1 || gunStr.indexOf(normalizeText_(cfg.gun2Label)) > -1) {
+  if (rowGunMatchesConfiguredGun_(gunStr, cfg.gun2Token, cfg.gun2Label)) {
     return {
       key: 'gun2',
       token: cfg.gun2Token,
@@ -209,6 +458,17 @@ function getGunConfig_(gun) {
   }
 
   return null;
+}
+
+/** Iki hucre/scanner degeri ayni gosterim gunune mu (verify, filtre, kontenjan) */
+function sameGunDay_(a, b) {
+  const ca = getGunConfig_(a);
+  const cb = getGunConfig_(b);
+  if (ca && cb) return ca.key === cb.key;
+  const sa = normalizeText_(hangiGunCellToNormString_(a));
+  const sb = normalizeText_(hangiGunCellToNormString_(b));
+  if (!sa || !sb) return false;
+  return sa.indexOf(sb) !== -1 || sb.indexOf(sa) !== -1;
 }
 
 function encodeEmail_(email) {
@@ -277,7 +537,7 @@ function getBiletSayisi_(gun) {
     const rowGun = data[i][COL_HANGI_GUN - 1];
     const kisiSayisi = parseInt(data[i][COL_KISI_SAYISI - 1], 10) || 0;
 
-    if (rowGun && rowGun.toString().indexOf(gun.toString()) > -1) {
+    if (rowGun && sameGunDay_(rowGun, gun)) {
       count += kisiSayisi;
     }
   }
@@ -302,7 +562,7 @@ function checkKontenjan_(gun) {
       'Otomatik bildirim sistemi.';
 
     try {
-      GmailApp.sendEmail(ADMIN_EMAIL, subject, body);
+      GmailApp.sendEmail(getAdminEmail_(), subject, body);
     } catch (err) {
       Logger.log('Kontenjan mail hatasi: ' + err);
     }
@@ -417,11 +677,16 @@ function handleEdit(e) {
       '</div>';
   }
 
-  const subject = ETKINLIK_ADI + ' Tiyatro Biletleriniz - ' + adSoyad;
+  var ecMail = getEventConfig_();
+  var evAd = String(ecMail.eventName || ETKINLIK_ADI).trim();
+  var yerStr = String(ecMail.venue || ETKINLIK_YER).trim();
+  var adresStr = String(ecMail.address || ETKINLIK_ADRES).trim();
+
+  const subject = evAd + ' Tiyatro Biletleriniz - ' + adSoyad;
   const htmlBody =
     '<div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 20px; background:#faf8f0;">' +
       '<div style="background: linear-gradient(135deg, #1a4480, #0a3d62); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">' +
-        '<h1 style="margin:0; color:#ffffff; font-size:28px; font-weight:400; letter-spacing:2px;">' + ETKINLIK_ADI.toUpperCase() + '</h1>' +
+        '<h1 style="margin:0; color:#ffffff; font-size:28px; font-weight:400; letter-spacing:2px;">' + evAd.toUpperCase() + '</h1>' +
         '<p style="margin:10px 0 0 0; color:#ffffff; font-size:14px;">Biletleriniz Hazir</p>' +
       '</div>' +
       '<div style="background:#fff; padding:30px; border:1px solid #ddd; border-top:none;">' +
@@ -431,7 +696,7 @@ function handleEdit(e) {
           '<p style="margin:0; color:#856404; font-size:14px;"><strong>Onemli:</strong> Her QR kod tek kullanimliktir. Giriste her kisi icin ayri QR kod gosterilmelidir.</p>' +
         '</div>' +
         '<div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:20px; border-left:4px solid #1a4480;">' +
-          '<p style="margin:0; color:#1a4480;"><strong>Tarih:</strong> ' + hangiGun + '<br><strong>Toplam Bilet:</strong> ' + kisiSayisi + ' adet</p>' +
+          '<p style="margin:0; color:#1a4480;"><strong>Tarih:</strong> ' + hangiGun + '<br><strong>Yer:</strong> ' + yerStr + ' - ' + adresStr + '<br><strong>Toplam Bilet:</strong> ' + kisiSayisi + ' adet</p>' +
         '</div>' +
         '<hr style="border:none; border-top:1px solid #ddd; margin:25px 0;">' +
         qrListHtml +
@@ -502,13 +767,17 @@ function verifyTicket(qrId, selectedDate) {
   const kalanQrSayisi = qrIds.length;
   const okutulanSayisi = kisiSayisi - kalanQrSayisi;
 
-  // Tarih kontrolü (scanner tarafi "6" / "9" gonderiyor)
+  // Tarih kontrolü: token "7" / "07", formda Date veya "7 Nisan" / dd.MM.yyyy — sameGunDay_ ile hizala
   if (selectedDate && selectedDate !== 'all') {
-    if (!hangiGun || hangiGun.toString().indexOf(selectedDate) === -1) {
+    if (!hangiGun || !sameGunDay_(hangiGun, selectedDate)) {
+      var cfgRowV = getGunConfig_(hangiGun);
+      var hangiGunDisplay = cfgRowV
+        ? cfgRowV.label
+        : hangiGunCellToNormString_(hangiGun) || String(hangiGun);
       return {
         status: 'wrong_date',
         title: 'Yanlis Tarih',
-        message: 'Bu bilet ' + hangiGun + ' icin gecerlidir.',
+        message: 'Bu bilet ' + hangiGunDisplay + ' icin gecerlidir.',
         adSoyad: adSoyad,
         telefon: telefon,
         okutulan: okutulanSayisi,
@@ -750,6 +1019,13 @@ function countBiletler() {
  **********************/
 
 function buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi) {
+  const ec = getEventConfig_();
+  const evAd = String(ec.eventName || ETKINLIK_ADI).trim();
+  const evYer = String(ec.venue || ETKINLIK_YER).trim();
+  const evAdres = String(ec.address || ETKINLIK_ADRES).trim();
+  const evKapi = String(ec.doorTime || ETKINLIK_KAPIDA_SAAT).trim();
+  const sehirEtiket = String(ec.cityBadge || 'Ankara').toUpperCase();
+
   let qrListHtml = '';
 
   for (let i = 0; i < qrIds.length; i++) {
@@ -773,8 +1049,8 @@ function buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi) {
     '<div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 20px;">' +
 
     '<div style="background: linear-gradient(135deg, #c41e3a, #8b0000); padding: 30px; border-radius: 16px 16px 0 0; text-align: center;">' +
-    '<div style="font-size:12px; letter-spacing:4px; color:rgba(250,248,240,0.8); margin-bottom:8px;">ANKARA</div>' +
-    '<h1 style="margin:0; color:#faf8f0; font-size:32px; font-weight:400; letter-spacing:3px;">' + ETKINLIK_ADI.toUpperCase() + '</h1>' +
+    '<div style="font-size:12px; letter-spacing:4px; color:rgba(250,248,240,0.8); margin-bottom:8px;">' + sehirEtiket + '</div>' +
+    '<h1 style="margin:0; color:#faf8f0; font-size:32px; font-weight:400; letter-spacing:3px;">' + evAd.toUpperCase() + '</h1>' +
     '<p style="margin:12px 0 0 0; color:rgba(250,248,240,0.9); font-size:16px;">Etkinlik Hatirlatmasi</p>' +
     '</div>' +
 
@@ -783,7 +1059,7 @@ function buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi) {
     '<p style="font-size:18px; color:#1a4480; margin-bottom:25px;">Merhaba <strong>' + adSoyad + '</strong>,</p>' +
 
     '<p style="color:#333; line-height:1.8; margin-bottom:25px;">' +
-    ETKINLIK_ADI + ' etkinligimize katilacaginiz icin cok heyecanliyiz! ' +
+    evAd + ' etkinligimize katilacaginiz icin cok heyecanliyiz! ' +
     'Biletlerinizi ve etkinlik detaylarini asagida bulabilirsiniz.' +
     '</p>' +
 
@@ -793,15 +1069,15 @@ function buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi) {
     '<table style="width:100%; border-collapse:collapse;">' +
     '<tr><td style="padding:8px 0; color:rgba(250,248,240,0.7); width:80px;">Tarih:</td><td style="padding:8px 0; font-weight:600;">' + hangiGun + '</td></tr>' +
     '<tr><td style="padding:8px 0; color:rgba(250,248,240,0.7);">Saat:</td><td style="padding:8px 0; font-weight:600;">' + saat + '</td></tr>' +
-    '<tr><td style="padding:8px 0; color:rgba(250,248,240,0.7);">Yer:</td><td style="padding:8px 0; font-weight:600;">' + ETKINLIK_YER + '</td></tr>' +
-    '<tr><td style="padding:8px 0; color:rgba(250,248,240,0.7);">Adres:</td><td style="padding:8px 0; font-weight:600;">' + ETKINLIK_ADRES + '</td></tr>' +
+    '<tr><td style="padding:8px 0; color:rgba(250,248,240,0.7);">Yer:</td><td style="padding:8px 0; font-weight:600;">' + evYer + '</td></tr>' +
+    '<tr><td style="padding:8px 0; color:rgba(250,248,240,0.7);">Adres:</td><td style="padding:8px 0; font-weight:600;">' + evAdres + '</td></tr>' +
     '</table>' +
     '</div>' +
 
     '<div style="background:#fff3cd; border-left:5px solid #c41e3a; padding:20px; margin-bottom:25px; border-radius:0 12px 12px 0;">' +
     '<p style="margin:0 0 10px 0; color:#856404; font-weight:600;">Onemli Hatirlatmalar:</p>' +
     '<ul style="margin:0; padding-left:20px; color:#856404; line-height:1.8;">' +
-    '<li>Lutfen <strong>' + ETKINLIK_KAPIDA_SAAT + '</strong>\'de kapida olunuz.</li>' +
+    '<li>Lutfen <strong>' + evKapi + '</strong>\'de kapida olunuz.</li>' +
     '<li>Her kisi icin ayri QR kod gosterilmelidir.</li>' +
     '<li>QR kodlarinizi ekran parlakligi acik sekilde hazir tutunuz.</li>' +
     '<li>Mail iceriginde QR kodunuz net gozukmuyorsa veya kapida sorun cikarsa lutfen gorevliye QR-ID bilginizi manuel kontrol icin veriniz.</li>' +
@@ -825,7 +1101,7 @@ function buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi) {
     '</div>' +
 
     '<div style="background:#1a4480; padding:20px; border-radius:0 0 16px 16px; text-align:center;">' +
-    '<p style="margin:0 0 5px 0; color:#faf8f0; font-size:14px;">' + ETKINLIK_ADI + ' Tiyatro Ekibi</p>' +
+    '<p style="margin:0 0 5px 0; color:#faf8f0; font-size:14px;">' + evAd + ' Tiyatro Ekibi</p>' +
     '<p style="margin:0; color:rgba(250,248,240,0.6); font-size:12px;">Bu mail otomatik olarak gonderilmistir.</p>' +
     '</div>' +
 
@@ -838,18 +1114,19 @@ function buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi) {
  * TEST - Hatirlatma maili testi
  */
 function sendReminderTest() {
+  const cT = getEventConfig_();
   const testAdSoyad = 'Test Kullanici';
-  const testGun = ETKINLIK_GUN_1_LABEL;
-  const testSaat = ETKINLIK_GUN_1_SAAT;
+  const testGun = cT.gun1Label;
+  const testSaat = cT.gun1Saat;
   const testQrIds = ['TEST-QR-ID-1-BILET', 'TEST-QR-ID-2-BILET', 'TEST-QR-ID-3-BILET'];
   const testKisiSayisi = 3;
 
   const htmlBody = buildReminderHtml_(testAdSoyad, testGun, testSaat, testQrIds, testKisiSayisi);
-  const subject = '[TEST] ' + ETKINLIK_ADI + ' - Etkinlik Hatirlatmasi';
+  const subject = '[TEST] ' + String(cT.eventName || ETKINLIK_ADI).trim() + ' - Etkinlik Hatirlatmasi';
 
   try {
-    GmailApp.sendEmail(TEST_EMAIL, subject, '', { htmlBody: htmlBody });
-    Logger.log('Test maili gonderildi: ' + TEST_EMAIL);
+    GmailApp.sendEmail(getTestEmail_(), subject, '', { htmlBody: htmlBody });
+    Logger.log('Test maili gonderildi: ' + getTestEmail_());
   } catch (err) {
     Logger.log('HATA: ' + err);
   }
@@ -860,7 +1137,7 @@ function sendReminderTest() {
  */
 function sendReminderGun1() {
   const c = getEventConfig_();
-  sendReminderByDate_(c.gun1Token, ETKINLIK_GUN_1_SAAT);
+  sendReminderByDate_(c.gun1Token, c.gun1Saat);
 }
 
 /**
@@ -868,7 +1145,7 @@ function sendReminderGun1() {
  */
 function sendReminderGun2() {
   const c = getEventConfig_();
-  sendReminderByDate_(c.gun2Token, ETKINLIK_GUN_2_SAAT);
+  sendReminderByDate_(c.gun2Token, c.gun2Saat);
 }
 
 /**
@@ -892,6 +1169,9 @@ function sendReminderByDate_(gun, saat) {
     return;
   }
 
+  const ecHat = getEventConfig_();
+  const evNameHat = String(ecHat.eventName || ETKINLIK_ADI).trim();
+
   const data = sheet.getDataRange().getValues();
   let gonderilen = 0;
   let hata = 0;
@@ -910,7 +1190,7 @@ function sendReminderByDate_(gun, saat) {
     const kisiSayisi = parseInt(data[i][COL_KISI_SAYISI - 1], 10) || 1;
     const qrIdString = data[i][COL_QR_ID - 1];
 
-      if (!hangiGun || hangiGun.toString().indexOf(gun.toString()) === -1) {
+      if (!hangiGun || !sameGunDay_(hangiGun, gun)) {
       continue;
     }
 
@@ -945,7 +1225,7 @@ function sendReminderByDate_(gun, saat) {
 
     try {
       const htmlBody = buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi);
-      const subject = ETKINLIK_ADI + ' - Etkinlik Hatirlatmasi (' + hangiGun + ')';
+      const subject = evNameHat + ' - Etkinlik Hatirlatmasi (' + hangiGun + ')';
 
       GmailApp.sendEmail(mail, subject, '', { htmlBody: htmlBody });
 
@@ -971,7 +1251,7 @@ function sendReminderByDate_(gun, saat) {
 
   // Ozet admin maili (opsiyonel ama faydali)
   try {
-    const summarySubject = ETKINLIK_ADI + ' Hatirlatma Ozeti - ' + gun;
+    const summarySubject = evNameHat + ' Hatirlatma Ozeti - ' + gun;
     const summaryBody =
       'Hatirlatma gonderimi tamamlandi.\n\n' +
       'Tarih: ' + gun + '\n' +
@@ -980,7 +1260,7 @@ function sendReminderByDate_(gun, saat) {
       'Hata: ' + hata + '\n' +
       'Saat: ' + new Date().toLocaleString('tr-TR');
 
-    GmailApp.sendEmail(ADMIN_EMAIL, summarySubject, summaryBody);
+    GmailApp.sendEmail(getAdminEmail_(), summarySubject, summaryBody);
   } catch (err) {
     Logger.log('Admin ozet maili gonderilemedi: ' + err);
   }
@@ -1149,8 +1429,9 @@ function doGet(e) {
   }
 
   if (page === 'scan') {
+    const ecPg = getEventConfig_();
     return HtmlService.createHtmlOutput(buildScannerHtml())
-      .setTitle(ETKINLIK_ADI + ' Tiyatro')
+      .setTitle(String(ecPg.eventName || ETKINLIK_ADI).trim() + ' Tiyatro')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
@@ -1234,8 +1515,8 @@ function getStatsForApi(gun) {
             return { used: 0, total: 0, remaining: 0 };
         }
 
-        const ecApi = getEventConfig_();
-        const col = (gun === ecApi.gun1Token) ? STAT_COL_GUN_1 : STAT_COL_GUN_2;
+        var cfgApi = getGunConfig_(gun);
+        var col = cfgApi && cfgApi.key === 'gun2' ? STAT_COL_GUN_2 : STAT_COL_GUN_1;
 
         const giris = statSheet.getRange(STAT_ROW_GIRIS, col).getValue() || 0;
         const onayli = statSheet.getRange(STAT_ROW_ONAYLI, col).getValue() || 0;
@@ -1271,11 +1552,12 @@ function searchTickets(query, gun) {
     const adSoyad = (data[i][COL_AD_SOYAD - 1] || '').toString().toLowerCase();
     const mail = (data[i][COL_MAIL - 1] || '').toString().toLowerCase();
     const telefon = (data[i][COL_TELEFON - 1] || '').toString();
-    const hangiGun = (data[i][COL_HANGI_GUN - 1] || '').toString();
+    const hangiGunRaw = data[i][COL_HANGI_GUN - 1];
     const qrIdString = (data[i][COL_QR_ID - 1] || '').toString().toLowerCase();
     
-    // Gun filtresi
-    if (gun && gun !== 'all' && hangiGun.indexOf(gun) === -1) continue;
+    // Gun filtresi (Date hucre + token uyumu)
+    if (gun && gun !== 'all' && !sameGunDay_(hangiGunRaw, gun)) continue;
+    const hangiGun = hangiGunCellToNormString_(hangiGunRaw) || (hangiGunRaw != null ? String(hangiGunRaw) : '');
     
     // Arama
     const match = adSoyad.indexOf(searchTerm) > -1 || 
@@ -1325,10 +1607,11 @@ function getAllTickets(gun, page, limit) {
   
   for (let i = 1; i < data.length; i++) {
     const row = i + 1;
-    const hangiGun = (data[i][COL_HANGI_GUN - 1] || '').toString();
+    const hangiGunRaw = data[i][COL_HANGI_GUN - 1];
     
     // Gun filtresi
-    if (gun && gun !== 'all' && hangiGun.indexOf(gun) === -1) continue;
+    if (gun && gun !== 'all' && !sameGunDay_(hangiGunRaw, gun)) continue;
+    const hangiGun = hangiGunCellToNormString_(hangiGunRaw) || (hangiGunRaw != null ? String(hangiGunRaw) : '');
     
     const kisiSayisi = parseInt(data[i][COL_KISI_SAYISI - 1], 10) || 1;
     const qrIds = parseQrIds_(data[i][COL_QR_ID - 1]);
@@ -1391,6 +1674,7 @@ function getTicketByRow(row) {
     });
   }
   
+  var hgRaw = data[COL_HANGI_GUN - 1];
   return {
     success: true,
     ticket: {
@@ -1398,7 +1682,7 @@ function getTicketByRow(row) {
       adSoyad: data[COL_AD_SOYAD - 1] || '',
       mail: data[COL_MAIL - 1] || '',
       telefon: data[COL_TELEFON - 1] || '',
-      hangiGun: data[COL_HANGI_GUN - 1] || '',
+      hangiGun: hangiGunCellToNormString_(hgRaw) || (hgRaw != null ? String(hgRaw) : ''),
       kisiSayisi: kisiSayisi,
       odemeOnay: data[COL_ODEME_KONTROL - 1] === true,
       qrGonderildi: data[COL_QR_GONDERILDI - 1] === true,
@@ -1554,11 +1838,12 @@ function resendQrEmail(row) {
   
   // Hatırlatma maili gönder (kalan biletler için)
   try {
+    const ecQr = getEventConfig_();
     const cfg = getGunConfig_(hangiGun);
-    const saat = !cfg ? ETKINLIK_GUN_1_SAAT : (cfg.key === 'gun2' ? ETKINLIK_GUN_2_SAAT : ETKINLIK_GUN_1_SAAT);
-    
+    const saat = cfg ? (cfg.key === 'gun2' ? ecQr.gun2Saat : ecQr.gun1Saat) : ecQr.gun1Saat;
+
     const htmlBody = buildReminderHtml_(adSoyad, hangiGun, saat, qrIds, kisiSayisi);
-    const subject = ETKINLIK_ADI + ' - Biletleriniz (Yeniden Gönderim)';
+    const subject = String(ecQr.eventName || ETKINLIK_ADI).trim() + ' - Biletleriniz (Yeniden Gönderim)';
     
     GmailApp.sendEmail(mail, subject, '', { htmlBody: htmlBody });
     

@@ -4,6 +4,7 @@ import { X, User, Mail, Phone, Calendar, CheckCircle, Clock, AlertCircle } from 
 import { api } from '../api';
 import type { TicketDetail, BiletDetay } from '../api';
 import { useAppContext } from '../context/AppContext';
+import { formatShowDateForUi } from '../lib/formatShowDate';
 
 interface MailLookupCheckInModalProps {
     row: number | null;
@@ -122,7 +123,7 @@ const MailLookupCheckInModal: React.FC<MailLookupCheckInModalProps> = ({
                                     <Row icon={<User size={16} />} label="Ad Soyad" value={detail.adSoyad} />
                                     <Row icon={<Mail size={16} />} label="E-posta" value={detail.mail} />
                                     <Row icon={<Phone size={16} />} label="Telefon" value={detail.telefon} />
-                                    <Row icon={<Calendar size={16} />} label="Tarih" value={detail.hangiGun} />
+                                    <Row icon={<Calendar size={16} />} label="Tarih" value={formatShowDateForUi(detail.hangiGun)} />
                                 </div>
 
                                 {!detail.odemeOnay && (

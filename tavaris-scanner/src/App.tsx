@@ -262,9 +262,15 @@ const App = () => {
         </header>
 
         <div
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 md:px-8 lg:px-12 md:py-8 lg:py-12 max-md:scroll-pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] max-md:pt-[calc(4rem+env(safe-area-inset-top,0px)+1rem)] max-md:pb-[calc(5.75rem+env(safe-area-inset-bottom,0px)+1rem)]"
+          className={`min-h-0 flex-1 overscroll-y-contain px-4 md:px-8 lg:px-12 md:py-8 lg:py-12 max-md:scroll-pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] max-md:pt-[calc(4rem+env(safe-area-inset-top,0px)+1rem)] max-md:pb-[calc(5.75rem+env(safe-area-inset-bottom,0px)+0.75rem)] ${
+            activeTab === 'scanner' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'
+          }`}
         >
-          <div className="max-w-7xl mx-auto min-h-full">
+          <div
+            className={`mx-auto w-full max-w-7xl min-h-full ${
+              activeTab === 'scanner' ? 'flex min-h-0 flex-1 flex-col' : ''
+            }`}
+          >
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -272,7 +278,11 @@ const App = () => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.2 }}
-                className="min-h-full"
+                className={
+                  activeTab === 'scanner'
+                    ? 'flex h-full min-h-0 w-full flex-1 flex-col'
+                    : 'min-h-full w-full'
+                }
               >
                 {activeTab === 'dashboard' && <Dashboard stats={dashboardStats?.stats || null} />}
                 {activeTab === 'tickets' && (
@@ -282,7 +292,7 @@ const App = () => {
                   />
                 )}
                 {activeTab === 'scanner' && (
-                  <div className="flex min-h-[min(88dvh,720px)] flex-col md:min-h-[calc(100dvh-10rem)]">
+                  <div className="flex min-h-0 w-full flex-1 flex-col">
                     <ScannerView
                       onScan={handleScan}
                       onManualEmailLookup={handleManualEmailLookup}

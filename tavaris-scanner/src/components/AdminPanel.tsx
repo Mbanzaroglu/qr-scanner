@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Send, CheckCircle, Clock } from 'lucide-react';
 import { api } from '../api';
+import { formatShowDateForUi } from '../lib/formatShowDate';
 
 interface AdminPanelProps {
     pin: string;
@@ -130,7 +131,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ pin, selectedDate, onShowLoadin
                                         {t.odemeOnay ? 'ÖDEME ONAYLI' : 'ÖDEME BEKLEYEN'}
                                     </div>
                                     <div className="px-2 py-0.5 bg-bg-secondary rounded text-[10px] font-medium text-text-muted">
-                                        {t.hangiGun}
+                                        {formatShowDateForUi(t.hangiGun)}
                                     </div>
                                     <div className="px-2 py-0.5 bg-bg-secondary rounded text-[10px] font-medium text-text-muted">
                                         {t.kisiSayisi} Bilet

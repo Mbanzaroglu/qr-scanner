@@ -13,7 +13,7 @@ export interface EventShowConfig {
     tabLabel: string;
 }
 
-/** GAS `Etkinlik Ayarları` sayfasından gelen genel etkinlik bilgisi */
+/** GAS: `Etkinlik Ayarları` + `Form İstatistikleri` Etkinlik Bilgileri tablosu (birleşik; tablo üstün gelir) */
 export interface EventPublicConfig {
     eventName: string;
     venue: string;

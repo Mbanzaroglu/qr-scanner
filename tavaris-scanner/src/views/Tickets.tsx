@@ -4,7 +4,7 @@ import { Search, ChevronDown, Check } from 'lucide-react';
 import { api } from '../api';
 import type { Ticket } from '../api';
 import { useAppContext } from '../context/AppContext';
-import { compactShowTabLabel } from '../lib/showTabLabel';
+import { formatShowDateForUi } from '../lib/formatShowDate';
 
 interface TicketsProps {
     onViewDetail: (ticket: Ticket) => void;
@@ -64,12 +64,12 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
                     {eventConfig ? (
                         <>
                             <DateTab
-                                label={compactShowTabLabel(eventConfig.gun1.tabLabel)}
+                                label={formatShowDateForUi(eventConfig.gun1.tabLabel)}
                                 active={selectedDate === eventConfig.gun1.token}
                                 onClick={() => setSelectedDate(eventConfig.gun1.token)}
                             />
                             <DateTab
-                                label={compactShowTabLabel(eventConfig.gun2.tabLabel)}
+                                label={formatShowDateForUi(eventConfig.gun2.tabLabel)}
                                 active={selectedDate === eventConfig.gun2.token}
                                 onClick={() => setSelectedDate(eventConfig.gun2.token)}
                             />
@@ -140,9 +140,10 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
                                     </td>
                                     <td className="px-6 md:px-8 py-6 text-right">
                                         <div className="flex justify-end">
-                                            <span className="inline-flex flex-col items-center justify-center min-w-[90px] md:min-w-[100px] py-2 px-3 md:px-4 bg-bg-primary rounded-2xl border border-border-light group-hover:border-accent-gold/40 transition-all shadow-sm group-hover:shadow-md group-hover:bg-white">
-                                                <span className="text-[11px] md:text-[12px] font-bold text-primary leading-tight font-playfair">{t.hangiGun.split(' ')[0]} {t.hangiGun.split(' ')[1]}</span>
-                                                <span className="text-[8px] md:text-[9px] font-extrabold text-text-muted uppercase tracking-[0.2em] mt-0.5">{t.hangiGun.split(' ')[2]}</span>
+                                            <span className="inline-flex min-w-[90px] md:min-w-[100px] items-center justify-center py-2 px-3 md:px-4 bg-bg-primary rounded-2xl border border-border-light group-hover:border-accent-gold/40 transition-all shadow-sm group-hover:shadow-md group-hover:bg-white">
+                                                <span className="text-[11px] md:text-[12px] font-bold text-primary leading-tight font-playfair text-center">
+                                                    {formatShowDateForUi(t.hangiGun)}
+                                                </span>
                                             </span>
                                         </div>
                                     </td>

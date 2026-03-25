@@ -3,7 +3,7 @@ import jsQR from 'jsqr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, AlertCircle, Smartphone, Keyboard, RefreshCw, Mail } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { compactShowTabLabel } from '../lib/showTabLabel';
+import { formatShowDateForUi } from '../lib/formatShowDate';
 
 interface ScannerViewProps {
     onScan: (data: string) => void;
@@ -170,7 +170,7 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, onManualEmailLookup, 
     }, [eventConfig, selectedDate, setSelectedDate]);
 
     return (
-        <div className="flex h-full min-h-0 flex-1 flex-col gap-2 md:gap-4">
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-2 md:gap-4">
             {/* Üst kontroller — shrink-0; kamera alanı kalan tüm yüksekliği alır */}
             <div className="flex shrink-0 flex-col gap-2 md:gap-4">
                 <div className="flex items-center justify-between max-md:py-0.5">
@@ -188,14 +188,14 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, onManualEmailLookup, 
                                 onClick={() => setSelectedDate(eventConfig.gun1.token)}
                                 className={`flex-1 whitespace-nowrap py-2 text-[10px] font-black uppercase tracking-widest rounded-soft transition-all ${selectedDate === eventConfig.gun1.token ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:text-primary'}`}
                             >
-                                {compactShowTabLabel(eventConfig.gun1.tabLabel)}
+                                {formatShowDateForUi(eventConfig.gun1.tabLabel)}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setSelectedDate(eventConfig.gun2.token)}
                                 className={`flex-1 whitespace-nowrap py-2 text-[10px] font-black uppercase tracking-widest rounded-soft transition-all ${selectedDate === eventConfig.gun2.token ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:text-primary'}`}
                             >
-                                {compactShowTabLabel(eventConfig.gun2.tabLabel)}
+                                {formatShowDateForUi(eventConfig.gun2.tabLabel)}
                             </button>
                         </>
                     ) : (
@@ -219,7 +219,7 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, onManualEmailLookup, 
                 </button>
             </div>
 
-            <div className="card relative flex min-h-[min(52dvh,420px)] flex-1 flex-col items-center justify-center overflow-hidden border-border-elegant bg-black md:min-h-[min(60dvh,520px)] max-md:rounded-lg">
+            <div className="card relative flex min-h-[12rem] flex-1 flex-col items-center justify-center overflow-hidden border-border-elegant bg-black max-md:rounded-lg">
                 {mode === 'camera' ? (
                     <>
                         {cameraError ? (
@@ -239,7 +239,7 @@ const ScannerView: React.FC<ScannerViewProps> = ({ onScan, onManualEmailLookup, 
                                 <canvas ref={canvasRef} className="hidden" />
 
                                 <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-3 md:p-10">
-                                    <div className="relative aspect-[3/4] w-[min(100%,min(92vw,22rem))] max-h-[min(76dvh,100%)] md:aspect-square md:max-h-none md:max-w-[280px]">
+                                    <div className="relative aspect-[3/4] w-[min(100%,min(92vw,22rem))] max-h-full md:aspect-square md:max-h-[min(100%,280px)] md:max-w-[280px]">
                                         <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-accent-gold rounded-tl-2xl shadow-[0_0_15px_rgba(212,168,83,0.5)]" />
                                         <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-accent-gold rounded-tr-2xl shadow-[0_0_15px_rgba(212,168,83,0.5)]" />
                                         <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-accent-gold rounded-bl-2xl shadow-[0_0_15px_rgba(212,168,83,0.5)]" />

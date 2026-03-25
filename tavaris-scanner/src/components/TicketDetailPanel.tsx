@@ -4,6 +4,7 @@ import { X, CheckCircle, Clock, Send, User, Mail, Phone, Calendar, AlertCircle }
 import { api } from '../api';
 import type { Ticket, TicketDetail, BiletDetay } from '../api';
 import { useAppContext } from '../context/AppContext';
+import { formatShowDateForUi } from '../lib/formatShowDate';
 
 interface TicketDetailPanelProps {
     ticket: Ticket | null;
@@ -108,7 +109,7 @@ const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticket, onClose, 
                                         <InfoItem icon={<User size={18} />} label="Ad Soyad" value={detail.adSoyad} />
                                         <InfoItem icon={<Mail size={18} />} label="E-posta" value={detail.mail} />
                                         <InfoItem icon={<Phone size={18} />} label="Telefon" value={detail.telefon} />
-                                        <InfoItem icon={<Calendar size={18} />} label="Etkinlik Tarihi" value={detail.hangiGun} />
+                                        <InfoItem icon={<Calendar size={18} />} label="Etkinlik Tarihi" value={formatShowDateForUi(detail.hangiGun)} />
                                     </section>
 
                                     {/* Status Section */}
