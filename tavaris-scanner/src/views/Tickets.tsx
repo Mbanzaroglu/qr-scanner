@@ -5,6 +5,7 @@ import { api } from '../api';
 import type { Ticket } from '../api';
 import { useAppContext } from '../context/AppContext';
 import { formatShowDateForUi } from '../lib/formatShowDate';
+import { ticketMatchesSelectedDay } from '../lib/ticketDayMatch';
 
 interface TicketsProps {
     onViewDetail: (ticket: Ticket) => void;
@@ -19,12 +20,12 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
     const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'unpaid'>('all');
     const [loading, setLoading] = useState(false);
 
+    /** Sunucu her zaman tüm günler (date=all); gün sekmeleri istemci filtresi */
     const fetchTickets = useCallback(async () => {
         if (!pin) return;
         setLoading(true);
         try {
-            const dateStr = selectedDate || 'all';
-            const result = await api.searchTickets(query, dateStr, pin);
+            const result = await api.searchTickets(query, 'all', pin);
             if (result.success) {
                 setTickets(result.results);
             }
@@ -33,7 +34,7 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
         } finally {
             setLoading(false);
         }
-    }, [pin, selectedDate, query]);
+    }, [pin, query]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -44,10 +45,15 @@ const Tickets = ({ onViewDetail }: TicketsProps) => {
 
     useEffect(() => {
         let result = [...tickets];
-        if (filterStatus === 'paid') result = result.filter(t => t.odemeOnay);
-        else if (filterStatus === 'unpaid') result = result.filter(t => !t.odemeOnay);
+        if (eventConfig) {
+            result = result.filter((t) =>
+                ticketMatchesSelectedDay(t.hangiGun, selectedDate, eventConfig.gun1, eventConfig.gun2)
+            );
+        }
+        if (filterStatus === 'paid') result = result.filter((t) => t.odemeOnay);
+        else if (filterStatus === 'unpaid') result = result.filter((t) => !t.odemeOnay);
         setFilteredTickets(result);
-    }, [tickets, filterStatus]);
+    }, [tickets, filterStatus, selectedDate, eventConfig]);
 
     return (
         <motion.div

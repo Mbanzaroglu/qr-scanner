@@ -19,7 +19,7 @@ const STAT_SHEET_NAME = 'Form İstatistikleri';
 
 // Scanner / dashboard / form gun eslemesi: "Etkinlik Ayarlari" sayfasi (getEventConfig_)
 const CONFIG_SHEET_NAME = 'Etkinlik Ayarları';
-// "Form İstatistikleri" icindeki "Etkinlik Bilgileri": 1. satir baslik, 2. satir veri; G–P sabit sütunlar (B/C satir 2 istatistik sayaci ile cakismaz)
+// "Form İstatistikleri": ustte giris/onayli/kalan (satir 2–4, B/C); altta Tablo1 — A etiket, B deger (satir 7+)
 
 // Mail HTML ve konu satirlari — sheet ile degismez; buradan duzenleyin
 const ETKINLIK_ADI = 'Aşk Öldürür';
@@ -69,19 +69,6 @@ const STAT_ROW_KALAN = 4;
 const STAT_COL_GUN_1 = 2; // B
 const STAT_COL_GUN_2 = 3; // C
 
-// Etkinlik Bilgileri (Form İstatistikleri): 1. satir baslik (okunmaz), 2. satir veri; G–P sabit
-const STAT_EVT_ROW_DATA = 2;
-const STAT_EVT_COL_EVENT_NAME = 7; // G
-const STAT_EVT_COL_VENUE = 8; // H
-const STAT_EVT_COL_ADDRESS = 9; // I
-const STAT_EVT_COL_DOOR_TIME = 10; // J
-const STAT_EVT_COL_GUN_1_LABEL = 11; // K
-const STAT_EVT_COL_GUN_1_SAAT = 12; // L
-const STAT_EVT_COL_GUN_2_LABEL = 13; // M
-const STAT_EVT_COL_GUN_2_SAAT = 14; // N
-const STAT_EVT_COL_ADMIN_EMAIL = 15; // O
-const STAT_EVT_COL_TEST_EMAIL = 16; // P
-
 // Web App URL (mevcut deployment URL'n varsa burada guncelle)
 const WEB_APP_BASE_URL = 'https://script.google.com/macros/s/AKfycbxJhTRpH1OOW-t4Ry-bZnVeSLkzINbolPcxeZHtiuI3HJgbyAUbqXtYm-6OjEIrROkvvA/exec';
 
@@ -91,7 +78,16 @@ const WEB_APP_BASE_URL = 'https://script.google.com/macros/s/AKfycbxJhTRpH1OOW-t
 
 function getSheet_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  return ss.getSheetByName(SHEET_NAME);
+  var name = SHEET_NAME;
+  try {
+    var c = getEventConfig_();
+    if (c.formResponsesSheet && String(c.formResponsesSheet).trim()) {
+      name = String(c.formResponsesSheet).trim();
+    }
+  } catch (e) {
+    /* ilk cold start / cache */
+  }
+  return ss.getSheetByName(name);
 }
 
 function getStatSheet_() {
@@ -156,47 +152,77 @@ function statTableTextCellToString_(val) {
   return String(val).trim();
 }
 
+/** A sutun etiketini kucuk harf + turkce normalize (eslestirme) */
+function foldStatSettingLabel_(raw) {
+  if (raw === null || raw === undefined) return '';
+  return String(raw)
+    .trim()
+    .toLowerCase()
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/\s+/g, ' ');
+}
+
 /**
- * Form Istatistikleri: Etkinlik Bilgileri — STAT_EVT_ROW_DATA satirinda G–P hucreleri (basliklar STAT_EVT_ROW_HEADER).
- * Baslik metnine bakilmaz; konum diger istatistik hucreleri gibi sabittir.
+ * Tablo1 A sutun etiketi -> dahili anahtar + hucre tipi
+ */
+function mapStatSettingLabelToMeta_(labelRaw) {
+  const h = foldStatSettingLabel_(labelRaw);
+  if (!h) return null;
+  if (h.indexOf('formun cevaplarinin') >= 0 && h.indexOf('sayfa') >= 0) {
+    return { key: 'FORM_RESPONSES_SHEET', type: 'text' };
+  }
+  if (h.indexOf('formun istatistiklerinin') >= 0 && h.indexOf('sayfa') >= 0) {
+    return { key: 'FORM_STATS_SHEET', type: 'text' };
+  }
+  if (h.indexOf('etkinlik adi') >= 0) return { key: 'EVENT_NAME', type: 'text' };
+  if (h.indexOf('etkinlik yeri') >= 0) return { key: 'EVENT_VENUE', type: 'text' };
+  if (h.indexOf('etkinlik adresi') >= 0) return { key: 'EVENT_ADDRESS', type: 'text' };
+  if (h.indexOf('kapi') >= 0 && (h.indexOf('saat') >= 0 || h.indexOf('acilis') >= 0)) {
+    return { key: 'DOOR_TIME', type: 'time' };
+  }
+  if (h.indexOf('1.') === 0 && h.indexOf('gosteri') >= 0 && h.indexOf('tarih') >= 0) {
+    return { key: 'GUN_1_LABEL', type: 'date' };
+  }
+  if (h.indexOf('1.') === 0 && h.indexOf('gosteri') >= 0 && h.indexOf('saat') >= 0) {
+    return { key: 'GUN_1_SAAT', type: 'time' };
+  }
+  if (h.indexOf('2.') === 0 && h.indexOf('gosteri') >= 0 && h.indexOf('tarih') >= 0) {
+    return { key: 'GUN_2_LABEL', type: 'date' };
+  }
+  if (h.indexOf('2.') === 0 && h.indexOf('gosteri') >= 0 && h.indexOf('saat') >= 0) {
+    return { key: 'GUN_2_SAAT', type: 'time' };
+  }
+  if (h.indexOf('admin') >= 0 && h.indexOf('mail') >= 0) return { key: 'ADMIN_EMAIL', type: 'text' };
+  if (h.indexOf('test') >= 0 && h.indexOf('mail') >= 0) return { key: 'TEST_EMAIL', type: 'text' };
+  if (h.indexOf('google') >= 0 && h.indexOf('form') >= 0 && h.indexOf('link') >= 0) {
+    return { key: 'GOOGLE_FORM_LINK', type: 'text' };
+  }
+  return null;
+}
+
+/**
+ * Form Istatistikleri: A:B Tablo1 — satir satir etiket eslemesi (satir numarasi sabit degil).
  */
 function readEventInfoTableFromStatSheet_() {
   const sh = getStatSheet_();
   if (!sh) return {};
 
-  const lastCol = sh.getLastColumn();
-  if (lastCol < STAT_EVT_COL_EVENT_NAME) return {};
-
-  const range = sh.getRange(
-    STAT_EVT_ROW_DATA,
-    STAT_EVT_COL_EVENT_NAME,
-    STAT_EVT_ROW_DATA,
-    STAT_EVT_COL_TEST_EMAIL
-  );
-  const row = range.getValues()[0];
-
-  const pairs = [
-    ['EVENT_NAME', row[0], 'text'],
-    ['EVENT_VENUE', row[1], 'text'],
-    ['EVENT_ADDRESS', row[2], 'text'],
-    ['DOOR_TIME', row[3], 'time'],
-    ['GUN_1_LABEL', row[4], 'date'],
-    ['GUN_1_SAAT', row[5], 'time'],
-    ['GUN_2_LABEL', row[6], 'date'],
-    ['GUN_2_SAAT', row[7], 'time'],
-    ['ADMIN_EMAIL', row[8], 'text'],
-    ['TEST_EMAIL', row[9], 'text']
-  ];
-
+  const values = sh.getDataRange().getValues();
   const map = {};
-  for (let i = 0; i < pairs.length; i++) {
-    const v = pairs[i][1];
-    const kind = pairs[i][2];
-    let strVal = '';
-    if (kind === 'time') strVal = statTableTimeCellToString_(v);
-    else if (kind === 'date') strVal = statTableDateCellToString_(v);
+  for (let r = 0; r < values.length; r++) {
+    const meta = mapStatSettingLabelToMeta_(values[r][0]);
+    if (!meta) continue;
+    const v = values[r][1];
+    var strVal = '';
+    if (meta.type === 'time') strVal = statTableTimeCellToString_(v);
+    else if (meta.type === 'date') strVal = statTableDateCellToString_(v);
     else strVal = statTableTextCellToString_(v);
-    if (strVal !== '') map[pairs[i][0]] = strVal;
+    if (strVal !== '') map[meta.key] = strVal;
   }
   return map;
 }
@@ -289,7 +315,9 @@ function getEventConfig_() {
     gun2Label: String(cellOrDefault_(m, 'GUN_2_LABEL', ETKINLIK_GUN_2_LABEL)),
     gun2Saat: String(cellOrDefault_(m, 'GUN_2_SAAT', ETKINLIK_GUN_2_SAAT)),
     gun2Limit: parseInt(cellOrDefault_(m, 'GUN_2_KONTENJAN', 270), 10) || 270,
-    gun2Tab: String(cellOrDefault_(m, 'GUN_2_TAB', ''))
+    gun2Tab: String(cellOrDefault_(m, 'GUN_2_TAB', '')),
+    /** Tablo1: Formun Cevaplarinin Oldugu Sayfa Adi — bos ise SHEET_NAME */
+    formResponsesSheet: String(m.FORM_RESPONSES_SHEET || '').trim()
   };
 
   if (statOnly.GUN_1_LABEL && !statOnly.GUN_1_TOKEN) {
@@ -552,19 +580,33 @@ function checkKontenjan_(gun) {
   const mevcutSayi = getBiletSayisi_(gun);
 
   if (mevcutSayi >= cfg.limit) {
-    const subject = 'Kontenjan Doldu - ' + gun;
+    const ecfg = getEventConfig_();
+    const gunLabel = cfg.label;
+    const otherGunLabel = cfg.key === 'gun1' ? ecfg.gun2Label : ecfg.gun1Label;
+    
+    // ✅ OTOMATİK: Dolu tarihi formdan kaldır
+    try {
+      updateFormWithSingleDate_(otherGunLabel);
+      Logger.log('Otomatik: ' + gunLabel + ' formdan kaldırıldı');
+    } catch (err) {
+      Logger.log('Form güncelleme hatası: ' + err);
+    }
+    
+    // Admin'e bilgi maili
+    const subject = '⛔ Kontenjan Doldu - ' + gunLabel;
     const body =
       'Merhaba,\n\n' +
-      gun + ' icin kontenjan dolmustur.\n\n' +
-      'Mevcut bilet sayisi: ' + mevcutSayi + '\n' +
+      gunLabel + ' için kontenjan dolmuştur.\n\n' +
+      '✅ ' + gunLabel + ' otomatik olarak formdan kaldırıldı.\n' +
+      '✅ Artık sadece ' + otherGunLabel + ' seçilebilir.\n\n' +
+      'Mevcut bilet sayısı: ' + mevcutSayi + '\n' +
       'Limit: ' + cfg.limit + '\n\n' +
-      'Lutfen formdaki bu tarihi kapatiniz.\n\n' +
       'Otomatik bildirim sistemi.';
 
     try {
       GmailApp.sendEmail(getAdminEmail_(), subject, body);
     } catch (err) {
-      Logger.log('Kontenjan mail hatasi: ' + err);
+      Logger.log('Kontenjan mail hatası: ' + err);
     }
     return false;
   }
@@ -1951,4 +1993,605 @@ function debugTicketRow() {
     const foundQr = qrIds.find(q => extractBiletNoFromQrId_(q) === i);
     Logger.log('  Bilet #' + i + ': ' + (foundQr ? 'MEVCUT (kullanılmamış)' : 'YOK (kullanılmış)'));
   }
+}
+
+/**********************
+ * FORM GÜNCELLEME
+ **********************/
+
+/**
+ * Tablo1 "Google Form Linki" satirindan URL
+ */
+function getFormLink_() {
+  const st = readEventInfoTableFromStatSheet_();
+  if (st.GOOGLE_FORM_LINK && String(st.GOOGLE_FORM_LINK).trim()) {
+    return String(st.GOOGLE_FORM_LINK).trim();
+  }
+  return null;
+}
+
+/**
+ * Form URL'inden ID'yi çıkarır
+ * Desteklenen formatlar:
+ * - https://docs.google.com/forms/d/e/FORM_ID/viewform (paylaşım linki)
+ * - https://docs.google.com/forms/d/FORM_ID/edit (düzenleme linki)
+ */
+function extractFormId_(url) {
+  if (!url) return null;
+  
+  // /d/FORM_ID/edit formatı (düzenleme linki) - önce bunu kontrol et
+  let match = url.match(/\/forms\/d\/([a-zA-Z0-9_-]+)(?:\/|$)/);
+  if (match && match[1] !== 'e') return match[1];
+  
+  // /d/e/FORM_ID/viewform formatı (paylaşım linki)
+  match = url.match(/\/forms\/d\/e\/([a-zA-Z0-9_-]+)/);
+  if (match) return match[1];
+  
+  return null;
+}
+
+/**
+ * Form'daki gün seçeneklerini Sheets'teki config'e göre günceller
+ * Menüden "Formu Güncelle" ile çalıştırılır
+ */
+function updateFormFromConfig() {
+  const formLink = getFormLink_();
+  
+  if (!formLink) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Hata',
+      'Form linki bulunamadı!\n\nForm İstatistikleri — Tablo1 içinde "Google Form Linki" satırına URL yapıştırın.',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    return;
+  }
+  
+  const formId = extractFormId_(formLink);
+  
+  if (!formId) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Hata',
+      'Form ID çıkarılamadı!\n\nLink formatını kontrol edin:\nhttps://docs.google.com/forms/d/.../edit',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    return;
+  }
+  
+  // Config'i al
+  const cfg = getEventConfig_();
+  
+  try {
+    // Formu aç
+    const form = FormApp.openById(formId);
+    
+    // Tüm soruları al
+    const items = form.getItems();
+    
+    // "Hangi gün" sorusunu bul
+    let found = false;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const title = item.getTitle().toLowerCase();
+      
+      // "hangi gün", "hangi güne", "gün seç" gibi başlıkları yakala
+      if (title.indexOf('hangi gün') > -1 || title.indexOf('gün seç') > -1 || title.indexOf('hangi güne') > -1) {
+        
+        // Multiple choice olarak cast et
+        let mcItem;
+        try {
+          mcItem = item.asMultipleChoiceItem();
+        } catch (e) {
+          // Dropdown olabilir
+          try {
+            mcItem = item.asListItem();
+          } catch (e2) {
+            continue;
+          }
+        }
+        
+        // Yeni seçenekleri oluştur
+        const choices = [];
+        
+        if (cfg.gun1Label) {
+          choices.push(mcItem.createChoice(cfg.gun1Label));
+        }
+        
+        if (cfg.gun2Label) {
+          choices.push(mcItem.createChoice(cfg.gun2Label));
+        }
+        
+        if (choices.length === 0) {
+          SpreadsheetApp.getUi().alert(
+            '❌ Hata',
+            'Gösteri tarihleri bulunamadı!\n\nK ve M sütunlarını kontrol edin.',
+            SpreadsheetApp.getUi().ButtonSet.OK
+          );
+          return;
+        }
+        
+        mcItem.setChoices(choices);
+        found = true;
+        
+        Logger.log('Form güncellendi! Yeni seçenekler: ' + cfg.gun1Label + ', ' + cfg.gun2Label);
+        break;
+      }
+    }
+    
+    if (!found) {
+      SpreadsheetApp.getUi().alert(
+        '❌ Hata',
+        '"Hangi gün" sorusu formda bulunamadı!\n\nSoru başlığında "hangi gün" ifadesi olmalı.',
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+      return;
+    }
+    
+    // Opsiyonel: Form başlığını da güncelle
+    if (cfg.eventName) {
+      form.setTitle(cfg.eventName + ' - Bilet Formu');
+    }
+    
+    // Cache'i temizle
+    clearEventConfigCache();
+    
+    // Başarı mesajı
+    SpreadsheetApp.getUi().alert(
+      '✅ Başarılı',
+      'Form güncellendi!\n\n' +
+      '• ' + cfg.gun1Label + '\n' +
+      '• ' + cfg.gun2Label + '\n\n' +
+      'Form başlığı: ' + cfg.eventName + ' - Bilet Formu',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    
+  } catch (err) {
+    SpreadsheetApp.getUi().alert(
+      '❌ Hata',
+      'Form güncellenemedi!\n\n' + err.toString() + '\n\n' +
+      'Form ile aynı Google hesabında olduğunuzdan emin olun.',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    Logger.log('Form güncelleme hatası: ' + err);
+  }
+}
+
+
+/**********************
+ * YENİ ETKİNLİK YÖNETİMİ
+ * Mevcut AppScript kodunun ALTINA ekle
+ **********************/
+
+/**
+ * Yeni etkinlik başlatır:
+ * 1. Eski verileri arşivler
+ * 2. Form Yanıtları'nı temizler
+ * 3. İstatistikleri sıfırlar
+ * 4. Formu günceller
+ */
+function startNewEvent() {
+  const ui = SpreadsheetApp.getUi();
+  const cfg = getEventConfig_();
+  
+  // Onay al
+  const response = ui.alert(
+    '🆕 Yeni Etkinlik Başlat',
+    'Bu işlem şunları yapacak:\n\n' +
+    '1. Mevcut verileri "Arşiv" sayfasına taşıyacak\n' +
+    '2. Form Yanıtları sayfasını temizleyecek\n' +
+    '3. İstatistikleri sıfırlayacak\n' +
+    '4. Formdaki tarihleri güncelleyecek\n\n' +
+    'Yeni etkinlik: ' + cfg.eventName + '\n' +
+    'Tarihler: ' + cfg.gun1Label + ' / ' + cfg.gun2Label + '\n\n' +
+    'Devam etmek istiyor musunuz?',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response !== ui.Button.YES) {
+    ui.alert('İptal', 'İşlem iptal edildi.', ui.ButtonSet.OK);
+    return;
+  }
+  
+  try {
+    // 1. Eski verileri arşivle
+    const archiveResult = archiveCurrentData_();
+    
+    // 2. Form Yanıtları'nı temizle
+    clearFormResponses_();
+    
+    // 3. İstatistikleri sıfırla
+    initStats();
+    
+    // 4. Formu güncelle
+    updateFormFromConfigSilent_();
+    
+    // 5. Cache temizle
+    clearEventConfigCache();
+    
+    ui.alert(
+      '✅ Yeni Etkinlik Hazır',
+      'İşlemler tamamlandı:\n\n' +
+      '• ' + archiveResult.rowCount + ' kayıt arşivlendi\n' +
+      '• Arşiv sayfası: "' + archiveResult.sheetName + '"\n' +
+      '• Form Yanıtları temizlendi\n' +
+      '• İstatistikler sıfırlandı\n' +
+      '• Form güncellendi\n\n' +
+      'Yeni etkinlik: ' + cfg.eventName,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (err) {
+    ui.alert(
+      '❌ Hata',
+      'İşlem sırasında hata oluştu:\n\n' + err.toString(),
+      ui.ButtonSet.OK
+    );
+    Logger.log('startNewEvent hatası: ' + err);
+  }
+}
+
+/**
+ * Mevcut verileri arşiv sayfasına taşır
+ */
+function archiveCurrentData_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = getSheet_();
+  
+  if (!sheet) {
+    throw new Error('Form Yanıtları sayfası bulunamadı!');
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const rowCount = data.length - 1; // Başlık hariç
+  
+  if (rowCount <= 0) {
+    return { rowCount: 0, sheetName: 'Arşiv yok' };
+  }
+  
+  // Arşiv sayfası adı (tarih + eski etkinlik adı)
+  const cfg = getEventConfig_();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const archiveName = 'Arşiv - ' + cfg.eventName + ' (' + today + ')';
+  
+  // Aynı isimde sayfa varsa numara ekle
+  let finalName = archiveName;
+  let counter = 1;
+  while (ss.getSheetByName(finalName)) {
+    finalName = archiveName + ' - ' + counter;
+    counter++;
+  }
+  
+  // Yeni arşiv sayfası oluştur
+  const archiveSheet = ss.insertSheet(finalName);
+  
+  // Verileri kopyala
+  archiveSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+  
+  // Başlık satırını formatla
+  archiveSheet.getRange(1, 1, 1, data[0].length)
+    .setBackground('#1a4480')
+    .setFontColor('#ffffff')
+    .setFontWeight('bold');
+  
+  // Sütun genişliklerini ayarla
+  archiveSheet.autoResizeColumns(1, data[0].length);
+  
+  Logger.log('Arşivlendi: ' + rowCount + ' kayıt → ' + finalName);
+  
+  return { rowCount: rowCount, sheetName: finalName };
+}
+
+/**
+ * Form Yanıtları sayfasını temizler (sadece başlıklar kalır)
+ */
+function clearFormResponses_() {
+  const sheet = getSheet_();
+  
+  if (!sheet) {
+    throw new Error('Form Yanıtları sayfası bulunamadı!');
+  }
+  
+  const lastRow = sheet.getLastRow();
+  
+  if (lastRow > 1) {
+    // 2. satırdan son satıra kadar sil
+    sheet.deleteRows(2, lastRow - 1);
+  }
+  
+  Logger.log('Form Yanıtları temizlendi');
+}
+
+/**
+ * Formu sessizce günceller (alert göstermez)
+ */
+function updateFormFromConfigSilent_() {
+  const formLink = getFormLink_();
+  if (!formLink) {
+    Logger.log('Form linki yok, güncelleme atlandı');
+    return;
+  }
+  
+  const formId = extractFormId_(formLink);
+  if (!formId) {
+    Logger.log('Form ID çıkarılamadı, güncelleme atlandı');
+    return;
+  }
+  
+  const cfg = getEventConfig_();
+  
+  try {
+    const form = FormApp.openById(formId);
+    const items = form.getItems();
+    
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const title = item.getTitle().toLowerCase();
+      
+      if (title.indexOf('hangi gün') > -1 || title.indexOf('gün seç') > -1 || title.indexOf('hangi güne') > -1) {
+        let mcItem;
+        try {
+          mcItem = item.asMultipleChoiceItem();
+        } catch (e) {
+          try {
+            mcItem = item.asListItem();
+          } catch (e2) {
+            continue;
+          }
+        }
+        
+        const choices = [];
+        if (cfg.gun1Label) choices.push(mcItem.createChoice(cfg.gun1Label));
+        if (cfg.gun2Label) choices.push(mcItem.createChoice(cfg.gun2Label));
+        
+        if (choices.length > 0) {
+          mcItem.setChoices(choices);
+        }
+        break;
+      }
+    }
+    
+    // Form başlığını güncelle
+    if (cfg.eventName) {
+      form.setTitle(cfg.eventName + ' - Bilet Formu');
+    }
+    
+    Logger.log('Form sessizce güncellendi');
+    
+  } catch (err) {
+    Logger.log('Form güncelleme hatası (sessiz): ' + err);
+  }
+}
+
+
+/**********************
+ * KONTENJAN YÖNETİMİ - TARİH SİLME
+ **********************/
+
+/**
+ * Kontenjanı dolan tarihi formdan kaldırır
+ */
+function removeFullDateFromForm() {
+  const ui = SpreadsheetApp.getUi();
+  const cfg = getEventConfig_();
+  
+  // Her iki günün istatistiklerini al
+  const stats1 = getStats(cfg.gun1Token);
+  const stats2 = getStats(cfg.gun2Token);
+  
+  // Durumları göster
+  let statusText = 'Mevcut Durum:\n\n';
+  statusText += '• ' + cfg.gun1Label + ': ' + stats1.total + '/' + cfg.gun1Limit;
+  statusText += (stats1.remaining <= 0) ? ' ⛔ DOLU\n' : ' ✅ Açık (' + stats1.remaining + ' kalan)\n';
+  statusText += '• ' + cfg.gun2Label + ': ' + stats2.total + '/' + cfg.gun2Limit;
+  statusText += (stats2.remaining <= 0) ? ' ⛔ DOLU\n' : ' ✅ Açık (' + stats2.remaining + ' kalan)\n';
+  
+  // Hangi tarihi silmek istediğini sor
+  const response = ui.prompt(
+    '📅 Tarihi Formdan Kaldır',
+    statusText + '\n' +
+    'Hangi tarihi formdan kaldırmak istiyorsunuz?\n\n' +
+    '1 = ' + cfg.gun1Label + '\n' +
+    '2 = ' + cfg.gun2Label + '\n' +
+    '0 = Her ikisini de koru (iptal)\n\n' +
+    'Seçiminiz (1, 2 veya 0):',
+    ui.ButtonSet.OK_CANCEL
+  );
+  
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+  
+  const choice = response.getResponseText().trim();
+  
+  if (choice === '0') {
+    ui.alert('İptal', 'İşlem iptal edildi.', ui.ButtonSet.OK);
+    return;
+  }
+  
+  let dateToRemove = null;
+  let dateToKeep = null;
+  
+  if (choice === '1') {
+    dateToRemove = cfg.gun1Label;
+    dateToKeep = cfg.gun2Label;
+  } else if (choice === '2') {
+    dateToRemove = cfg.gun2Label;
+    dateToKeep = cfg.gun1Label;
+  } else {
+    ui.alert('❌ Hata', 'Geçersiz seçim. 1 veya 2 girin.', ui.ButtonSet.OK);
+    return;
+  }
+  
+  // Onay al
+  const confirm = ui.alert(
+    '⚠️ Onay',
+    '"' + dateToRemove + '" tarihi formdan kaldırılacak.\n\n' +
+    'Sadece "' + dateToKeep + '" seçeneği kalacak.\n\n' +
+    'Devam edilsin mi?',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (confirm !== ui.Button.YES) {
+    return;
+  }
+  
+  try {
+    updateFormWithSingleDate_(dateToKeep);
+    
+    ui.alert(
+      '✅ Başarılı',
+      '"' + dateToRemove + '" formdan kaldırıldı.\n\n' +
+      'Artık sadece "' + dateToKeep + '" seçilebilir.',
+      ui.ButtonSet.OK
+    );
+    
+  } catch (err) {
+    ui.alert('❌ Hata', 'Form güncellenemedi:\n\n' + err.toString(), ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Formda sadece tek tarih bırakır
+ */
+function updateFormWithSingleDate_(dateLabel) {
+  const formLink = getFormLink_();
+  if (!formLink) throw new Error('Form linki bulunamadı!');
+  
+  const formId = extractFormId_(formLink);
+  if (!formId) throw new Error('Form ID çıkarılamadı!');
+  
+  const form = FormApp.openById(formId);
+  const items = form.getItems();
+  
+  let found = false;
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const title = item.getTitle().toLowerCase();
+    
+    if (title.indexOf('hangi gün') > -1 || title.indexOf('gün seç') > -1 || title.indexOf('hangi güne') > -1) {
+      let mcItem;
+      try {
+        mcItem = item.asMultipleChoiceItem();
+      } catch (e) {
+        try {
+          mcItem = item.asListItem();
+        } catch (e2) {
+          continue;
+        }
+      }
+      
+      // Sadece tek seçenek bırak
+      mcItem.setChoices([mcItem.createChoice(dateLabel)]);
+      found = true;
+      
+      Logger.log('Form güncellendi: Sadece ' + dateLabel + ' kaldı');
+      break;
+    }
+  }
+  
+  if (!found) {
+    throw new Error('"Hangi gün" sorusu formda bulunamadı!');
+  }
+}
+
+/**
+ * Her iki tarihi de forma geri ekler
+ */
+function restoreAllDatesToForm() {
+  const ui = SpreadsheetApp.getUi();
+  
+  const confirm = ui.alert(
+    '📅 Tarihleri Geri Yükle',
+    'Her iki tarih de forma geri eklenecek.\n\nDevam edilsin mi?',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (confirm !== ui.Button.YES) {
+    return;
+  }
+  
+  try {
+    updateFormFromConfigSilent_();
+    clearEventConfigCache();
+    
+    const cfg = getEventConfig_();
+    ui.alert(
+      '✅ Başarılı',
+      'Tarihler geri yüklendi:\n\n• ' + cfg.gun1Label + '\n• ' + cfg.gun2Label,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (err) {
+    ui.alert('❌ Hata', err.toString(), ui.ButtonSet.OK);
+  }
+}
+
+
+/**********************
+ * OTOMATİK KONTENJAN KONTROLÜ
+ * checkKontenjan_ fonksiyonunu GÜNCELLE (mevcut olanı değiştir)
+ **********************/
+
+/**
+ * Kontenjan kontrolü - doluysa admin'e mail + opsiyonel form güncelleme
+ * NOT: Mevcut checkKontenjan_ fonksiyonunu bununla DEĞİŞTİR
+ */
+function checkKontenjan_(gun) {
+  const cfg = getGunConfig_(gun);
+  if (!cfg) return true;
+
+  const mevcutSayi = getBiletSayisi_(gun);
+
+  if (mevcutSayi >= cfg.limit) {
+    const ecfg = getEventConfig_();
+    const gunLabel = cfg.label;
+    
+    const subject = '⛔ Kontenjan Doldu - ' + gunLabel;
+    const body =
+      'Merhaba,\n\n' +
+      gunLabel + ' için kontenjan dolmuştur.\n\n' +
+      'Mevcut bilet sayısı: ' + mevcutSayi + '\n' +
+      'Limit: ' + cfg.limit + '\n\n' +
+      '📋 Yapmanız gerekenler:\n' +
+      '1. Spreadsheet\'i açın\n' +
+      '2. Menü → 🎭 Tiyatro Sistemi → 📅 Dolu Tarihi Kaldır\n' +
+      '3. ' + gunLabel + ' seçeneğini formdan kaldırın\n\n' +
+      'Veya formu manuel olarak kapatabilirsiniz.\n\n' +
+      'Otomatik bildirim sistemi.';
+
+    try {
+      GmailApp.sendEmail(getAdminEmail_(), subject, body);
+      Logger.log('Kontenjan doldu maili gönderildi: ' + gunLabel);
+    } catch (err) {
+      Logger.log('Kontenjan mail hatası: ' + err);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+
+/**********************
+ * GÜNCELLENMİŞ MENÜ
+ * Mevcut onOpen fonksiyonunu bununla DEĞİŞTİR
+ **********************/
+
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🎭 Tiyatro Sistemi')
+    .addItem('🆕 Yeni Etkinlik Başlat', 'startNewEvent')
+    .addSeparator()
+    .addItem('📝 Formu Güncelle', 'updateFormFromConfig')
+    .addItem('📊 İstatistikleri Yenile', 'countBiletler')
+    .addSeparator()
+    .addSubMenu(ui.createMenu('📅 Tarih Yönetimi')
+      .addItem('Dolu Tarihi Kaldır', 'removeFullDateFromForm')
+      .addItem('Tüm Tarihleri Geri Yükle', 'restoreAllDatesToForm'))
+    .addSeparator()
+    .addSubMenu(ui.createMenu('📧 Hatırlatma Maili')
+      .addItem('Test Maili Gönder', 'sendReminderTest')
+      .addItem('1. Gün Hatırlatma', 'sendReminderGun1')
+      .addItem('2. Gün Hatırlatma', 'sendReminderGun2'))
+    .addToUi();
 }
